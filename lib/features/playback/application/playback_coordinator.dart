@@ -10,7 +10,9 @@ import 'package:video_player/video_player.dart';
 import '../domain/background_policy.dart';
 import '../domain/media_source.dart';
 import '../domain/play_queue.dart';
+import '../../player/domain/subtitles.dart';
 import '../domain/seek.dart';
+import '../domain/sleep_timer.dart';
 import 'playback_progress_store.dart';
 import 'queue_store.dart';
 
@@ -74,6 +76,17 @@ class PlaybackCoordinator extends BaseAudioHandler with SeekHandler {
   final ValueNotifier<PlayQueue> playQueue = ValueNotifier(
     const PlayQueue.empty(),
   );
+
+  /// Playback speed, applied to every item until changed (spec 4.2).
+  final ValueNotifier<double> speed = ValueNotifier(1.0);
+
+  final ValueNotifier<SleepTimer?> sleepTimer = ValueNotifier(null);
+  Timer? _sleepTimer;
+
+  /// External subtitles for the current item, if any.
+  final ValueNotifier<SubtitleTrack?> subtitles = ValueNotifier(null);
+  final ValueNotifier<Duration> subtitleOffset = ValueNotifier(Duration.zero);
+  final Map<String, SubtitleTrack> _subtitlesByMedia = {};
 
   /// Recent coordinator events, shown only in debug builds.
   final ValueNotifier<List<String>> debugEvents = ValueNotifier(const []);
@@ -162,6 +175,64 @@ class PlaybackCoordinator extends BaseAudioHandler with SeekHandler {
     _setQueue(enabled ? _queue.shuffle() : _queue.unshuffle());
     _broadcast(force: true);
   }
+
+  @override
+  Future<void> setSpeed(double speed) async {
+    this.speed.value = speed;
+    await controller.value?.setPlaybackSpeed(speed);
+    _broadcast(force: true);
+  }
+
+  /// Pauses after [after], or at the end of the current item when
+  /// [endOfItem] is set; null cancels (spec 6.3).
+  void setSleepTimer({Duration? after, bool endOfItem = false}) {
+    _sleepTimer?.cancel();
+    _sleepTimer = null;
+    if (endOfItem) {
+      sleepTimer.value = const SleepTimer.endOfItem();
+    } else if (after != null) {
+      sleepTimer.value = SleepTimer.after(DateTime.now().add(after));
+      _sleepTimer = Timer(after, () {
+        _log('sleep timer -> pause');
+        sleepTimer.value = null;
+        pause();
+      });
+    } else {
+      sleepTimer.value = null;
+    }
+  }
+
+  /// Loads external subtitles for the current item (null removes them).
+  Future<void> setSubtitles(SubtitleTrack? track) async {
+    final media = _queue.current?.media;
+    if (media == null) return;
+    if (track == null) {
+      _subtitlesByMedia.remove(media.id);
+    } else {
+      _subtitlesByMedia[media.id] = track;
+    }
+    subtitles.value = track;
+    await controller.value?.setClosedCaptionFile(
+      track == null ? null : Future.value(track.captions),
+    );
+  }
+
+  /// Positive delays show subtitles later, negative earlier.
+  void setSubtitleOffset(Duration offset) {
+    subtitleOffset.value = offset;
+    controller.value?.setCaptionOffset(offset);
+  }
+
+  /// Embedded audio tracks of the current item; empty when the engine
+  /// cannot list them.
+  Future<List<VideoAudioTrack>> audioTracks() async {
+    final c = controller.value;
+    if (c == null || !c.isAudioTrackSupportAvailable()) return const [];
+    return c.getAudioTracks();
+  }
+
+  Future<void> selectAudioTrack(String id) async =>
+      controller.value?.selectAudioTrack(id);
 
   @override
   Future<void> setRepeatMode(AudioServiceRepeatMode repeatMode) async =>
@@ -401,6 +472,13 @@ class PlaybackCoordinator extends BaseAudioHandler with SeekHandler {
     c.addListener(_onControllerChanged);
     controller.value = c;
     _log('loaded ${media.kind.name} "${media.title}"');
+    if (speed.value != 1.0) await c.setPlaybackSpeed(speed.value);
+    final track = _subtitlesByMedia[media.id];
+    subtitles.value = track;
+    if (track != null) {
+      await c.setClosedCaptionFile(Future.value(track.captions));
+      c.setCaptionOffset(subtitleOffset.value);
+    }
     if (autoplay) await c.play();
     _broadcast(force: true);
   }
@@ -446,6 +524,12 @@ class PlaybackCoordinator extends BaseAudioHandler with SeekHandler {
 
   Future<void> _onCompleted() async {
     _savePosition(completed: true);
+    if (sleepTimer.value?.endOfItem ?? false) {
+      sleepTimer.value = null;
+      _broadcast(force: true, completed: true);
+      _log('sleep timer: stopped at end of item');
+      return;
+    }
     switch (_queue.onCompletion) {
       case CompletionAction.restartCurrent:
         final c = controller.value;

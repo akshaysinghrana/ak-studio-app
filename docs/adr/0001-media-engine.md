@@ -84,3 +84,16 @@ Full results: `docs/testing/phase1-device-results.md`. The device was a Motorola
 - **Repeat and shuffle** are exposed to the system media session (`setRepeatMode` / `setShuffleMode`) and broadcast in `PlaybackState`.
 - **Notification metadata:** artist and album come from tags only, and artwork from MediaStore thumbnails. Tapping the notification opens Now Playing.
 - **Single engine:** there is still one audible engine and no handoff code path, so the spec 8.3 handoff requirements do not apply.
+
+## Phase 7 parity features (2026-10-26)
+
+| Feature | Implementation | Notes |
+|---|---|---|
+| Playback speed 0.5×–2× | `VideoPlayerController.setPlaybackSpeed`, also via the media session `setSpeed` | Speed carries over to the next items |
+| Sleep timer | Coordinator timer, or stop at the end of the current item instead of advancing | |
+| External subtitles (SRT, WebVTT) | SAF picker, then a native text read (2 MB cap), then `SubRipCaptionFile` / `WebVTTCaptionFile` | Size setting and delay in ±0.25 s steps (`setCaptionOffset`). Kept per item for the session |
+| Embedded audio tracks | `getAudioTracks` / `selectAudioTrack` | The menu entry appears only when the engine reports 2 or more tracks |
+| Embedded subtitle tracks | **Not offered** | `video_player` 2.14 exposes no text-track API. Fallback options are in "Why not the others" |
+| Brightness and volume gestures | Window brightness override (restored when the player closes) and `AudioManager` music stream | **Off by default.** Active only at 1× zoom and with controls unlocked, so pinch and pan are unaffected |
+| Rotation lock | `SystemChrome.setPreferredOrientations` | |
+| Equalizer | **Not offered** | The engine does not expose its audio session ID, so a real `android.media.audiofx.Equalizer` cannot be attached. Per the spec, no control is shown |

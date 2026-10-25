@@ -7,6 +7,7 @@ import '../core/platform/picture_in_picture.dart';
 import '../features/account/data/auth_repository.dart';
 import '../features/library/data/media_library_repository.dart';
 import '../features/playback/application/playback_coordinator.dart';
+import '../features/player/domain/subtitles.dart';
 import '../features/playlists/data/playlist_repository.dart';
 import '../features/settings/data/preferences_repository.dart';
 import '../features/sync/application/sync_service.dart';
@@ -77,4 +78,16 @@ final syncServiceProvider = Provider<SyncService?>((ref) {
 
 final authStateProvider = StreamProvider<AppUser?>(
   (ref) => ref.watch(authRepositoryProvider).authStateChanges(),
+);
+
+final brightnessGestureProvider = StreamProvider<bool>(
+  (ref) => ref.watch(preferencesProvider).watchBrightnessGesture(),
+);
+
+final volumeGestureProvider = StreamProvider<bool>(
+  (ref) => ref.watch(preferencesProvider).watchVolumeGesture(),
+);
+
+final subtitleSizeProvider = StreamProvider<SubtitleSize>(
+  (ref) => ref.watch(preferencesProvider).watchSubtitleSize(),
 );

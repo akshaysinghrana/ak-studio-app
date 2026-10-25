@@ -8,6 +8,7 @@ import '../../../app/router.dart';
 import '../../../core/permissions/media_permissions.dart';
 import '../../library/application/library_providers.dart';
 import '../../library/presentation/library_actions.dart';
+import '../../player/domain/subtitles.dart';
 import '../../player/presentation/widgets/background_audio_switch.dart';
 import '../../playback/domain/media_source.dart';
 
@@ -74,6 +75,49 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           const ListTile(
             title: Text('Seek step'),
             subtitle: Text('Rewind and forward move 10 seconds.'),
+          ),
+          SwitchListTile(
+            title: const Text('Brightness gesture'),
+            subtitle: const Text(
+              'Swipe up or down on the left half of a video. Changes only '
+              'this app\'s brightness while the player is open.',
+            ),
+            value: ref.watch(brightnessGestureProvider).value ?? false,
+            onChanged: (v) =>
+                ref.read(preferencesProvider).setBrightnessGesture(v),
+          ),
+          SwitchListTile(
+            title: const Text('Volume gesture'),
+            subtitle: const Text(
+              'Swipe up or down on the right half of a video to change '
+              'media volume.',
+            ),
+            value: ref.watch(volumeGestureProvider).value ?? false,
+            onChanged: (v) => ref.read(preferencesProvider).setVolumeGesture(v),
+          ),
+          ListTile(
+            title: const Text('Subtitle size'),
+            trailing: DropdownButton<SubtitleSize>(
+              value:
+                  ref.watch(subtitleSizeProvider).value ?? SubtitleSize.medium,
+              onChanged: (v) {
+                if (v != null) ref.read(preferencesProvider).setSubtitleSize(v);
+              },
+              items: const [
+                DropdownMenuItem(
+                  value: SubtitleSize.small,
+                  child: Text('Small'),
+                ),
+                DropdownMenuItem(
+                  value: SubtitleSize.medium,
+                  child: Text('Medium'),
+                ),
+                DropdownMenuItem(
+                  value: SubtitleSize.large,
+                  child: Text('Large'),
+                ),
+              ],
+            ),
           ),
           const _Header('Appearance'),
           Padding(

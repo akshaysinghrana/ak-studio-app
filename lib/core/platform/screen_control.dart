@@ -1,6 +1,7 @@
 import 'package:flutter/services.dart';
 
-/// Window-level screen controls (keep-awake, app brightness).
+/// Window-level screen controls (keep-awake, app brightness) and media
+/// volume for the player gestures.
 class ScreenControl {
   const ScreenControl();
 
@@ -17,4 +18,11 @@ class ScreenControl {
   /// The window override, or null when following the system brightness.
   Future<double?> brightness() =>
       _channel.invokeMethod<double>('getBrightness');
+
+  /// Media volume as 0..1.
+  Future<double> volume() async =>
+      await _channel.invokeMethod<double>('getVolume') ?? 0;
+
+  Future<void> setVolume(double fraction) =>
+      _channel.invokeMethod<void>('setVolume', fraction);
 }

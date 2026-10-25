@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -9,6 +10,8 @@ import '../../../app/theme/app_theme.dart';
 import '../../library/application/library_providers.dart';
 import '../../playback/domain/play_queue.dart';
 import '../../playlists/application/playlist_providers.dart';
+import '../../playback/application/playback_coordinator.dart';
+import 'widgets/player_sheets.dart';
 import 'widgets/queue_sheet.dart';
 import 'widgets/seek_bar.dart';
 import 'widgets/transport_controls.dart';
@@ -86,6 +89,7 @@ class MusicPlayerScreen extends ConsumerWidget {
                             showSeekBar: false,
                           ),
                           _ModeRow(mediaId: media.id),
+                          _ExtrasRow(coordinator: coordinator),
                         ],
                       );
                     },
@@ -175,6 +179,71 @@ class _ModeRow extends ConsumerWidget {
           selectedIcon: const Icon(Icons.shuffle_on),
         ),
       ],
+    );
+  }
+}
+
+/// Speed and sleep timer, with a live countdown (spec 6.3).
+class _ExtrasRow extends StatefulWidget {
+  const _ExtrasRow({required this.coordinator});
+
+  final PlaybackCoordinator coordinator;
+
+  @override
+  State<_ExtrasRow> createState() => _ExtrasRowState();
+}
+
+class _ExtrasRowState extends State<_ExtrasRow> {
+  Timer? _tick;
+
+  @override
+  void initState() {
+    super.initState();
+    _tick = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (widget.coordinator.sleepTimer.value?.endsAt != null) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _tick?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = widget.coordinator;
+    return ListenableBuilder(
+      listenable: Listenable.merge([c.speed, c.sleepTimer]),
+      builder: (context, _) {
+        final timer = c.sleepTimer.value;
+        final left = timer?.remaining(DateTime.now());
+        final timerLabel = timer == null
+            ? 'Sleep timer'
+            : timer.endOfItem
+            ? 'Ends after this'
+            : '${left!.inMinutes}:${(left.inSeconds % 60).toString().padLeft(2, '0')}';
+        return Wrap(
+          alignment: WrapAlignment.center,
+          spacing: 8,
+          children: [
+            ActionChip(
+              avatar: const Icon(Icons.speed),
+              label: Text(speedLabel(c.speed.value)),
+              tooltip: 'Playback speed',
+              onPressed: () => showSpeedSheet(context, c),
+            ),
+            ActionChip(
+              avatar: Icon(
+                timer == null ? Icons.bedtime_outlined : Icons.bedtime,
+              ),
+              label: Text(timerLabel),
+              tooltip: 'Sleep timer',
+              onPressed: () => showSleepTimerSheet(context, c),
+            ),
+          ],
+        );
+      },
     );
   }
 }

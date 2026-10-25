@@ -78,6 +78,12 @@ class FakeDocumentImporter implements DocumentImporter {
   }
 
   @override
+  Future<String?> pickSubtitle() async => null;
+
+  @override
+  Future<String> readText(String uri) async => '';
+
+  @override
   Future<void> release(String uri) async {
     granted.remove(uri);
     released.add(uri);

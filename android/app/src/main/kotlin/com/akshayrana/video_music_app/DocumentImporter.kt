@@ -15,6 +15,10 @@ class DocumentImporter(private val activity: Activity) : MethodChannel.MethodCal
     companion object {
         const val CHANNEL = "com.akshayrana.video_music_app/documents"
         const val REQUEST_CODE = 0x5550
+        const val SUBTITLE_REQUEST_CODE = 0x5551
+
+        // Subtitle files are small; refuse anything larger.
+        private const val MAX_TEXT_BYTES = 2 * 1024 * 1024
         private val MIME_TYPES = arrayOf("video/mp4", "audio/mpeg")
     }
 
@@ -23,6 +27,15 @@ class DocumentImporter(private val activity: Activity) : MethodChannel.MethodCal
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
             "pickMedia" -> pick(result)
+            "pickSubtitle" -> pickSubtitle(result)
+            "readText" -> {
+                val uri = call.argument<String>("uri")
+                if (uri == null) {
+                    result.error("bad_args", "uri is required", null)
+                    return
+                }
+                readText(Uri.parse(uri), result)
+            }
             "release" -> {
                 val uri = call.argument<String>("uri")
                 if (uri == null) {
@@ -69,8 +82,57 @@ class DocumentImporter(private val activity: Activity) : MethodChannel.MethodCal
         activity.startActivityForResult(intent, REQUEST_CODE)
     }
 
+    /** SRT/VTT picker; returns a single URI string or null. No persistable grant. */
+    private fun pickSubtitle(result: MethodChannel.Result) {
+        if (pending != null) {
+            result.error("busy", "A picker is already open", null)
+            return
+        }
+        pending = result
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            // Subtitle MIME types vary by provider; Dart validates the content.
+            type = "*/*"
+            putExtra(
+                Intent.EXTRA_MIME_TYPES,
+                arrayOf("application/x-subrip", "text/vtt", "text/plain", "application/octet-stream"),
+            )
+        }
+        activity.startActivityForResult(intent, SUBTITLE_REQUEST_CODE)
+    }
+
+    private fun readText(uri: Uri, result: MethodChannel.Result) {
+        Thread {
+            try {
+                val bytes = activity.contentResolver.openInputStream(uri)?.use { input ->
+                    val buffer = java.io.ByteArrayOutputStream()
+                    val chunk = ByteArray(16 * 1024)
+                    var total = 0
+                    while (true) {
+                        val n = input.read(chunk)
+                        if (n < 0) break
+                        total += n
+                        if (total > MAX_TEXT_BYTES) throw IllegalStateException("File is too large")
+                        buffer.write(chunk, 0, n)
+                    }
+                    buffer.toByteArray()
+                } ?: throw IllegalStateException("Cannot open file")
+                val text = String(bytes, Charsets.UTF_8)
+                activity.runOnUiThread { result.success(text) }
+            } catch (e: Exception) {
+                activity.runOnUiThread { result.error("read_failed", e.message, null) }
+            }
+        }.start()
+    }
+
     /** Returns true when the result belonged to this importer. */
     fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?): Boolean {
+        if (requestCode == SUBTITLE_REQUEST_CODE) {
+            val result = pending ?: return true
+            pending = null
+            result.success(if (resultCode == Activity.RESULT_OK) data?.data?.toString() else null)
+            return true
+        }
         if (requestCode != REQUEST_CODE) return false
         val result = pending ?: return true
         pending = null

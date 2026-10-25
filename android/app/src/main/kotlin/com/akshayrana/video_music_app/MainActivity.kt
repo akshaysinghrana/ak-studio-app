@@ -4,9 +4,11 @@ import android.app.PictureInPictureParams
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.Configuration
+import android.media.AudioManager
 import android.os.Build
 import android.util.Rational
 import android.view.WindowManager
+import kotlin.math.roundToInt
 import com.ryanheise.audioservice.AudioServiceActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -54,6 +56,23 @@ class MainActivity : AudioServiceActivity() {
                         screenBrightness = value?.coerceIn(0.01f, 1f)
                             ?: WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
                     }
+                    result.success(null)
+                }
+                // Media (music stream) volume as a 0..1 fraction (spec 5.4).
+                "getVolume" -> {
+                    val am = getSystemService(AUDIO_SERVICE) as AudioManager
+                    val max = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+                    result.success(am.getStreamVolume(AudioManager.STREAM_MUSIC).toDouble() / max)
+                }
+                "setVolume" -> {
+                    val am = getSystemService(AUDIO_SERVICE) as AudioManager
+                    val max = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+                    val fraction = (call.arguments as? Number)?.toDouble() ?: 0.0
+                    am.setStreamVolume(
+                        AudioManager.STREAM_MUSIC,
+                        (fraction.coerceIn(0.0, 1.0) * max).roundToInt(),
+                        0,
+                    )
                     result.success(null)
                 }
                 "getBrightness" -> {

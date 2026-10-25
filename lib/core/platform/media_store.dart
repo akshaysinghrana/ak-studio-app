@@ -63,6 +63,12 @@ class MethodChannelMediaStore implements MediaStoreGateway {
 /// System document picker with persistable read grants.
 abstract interface class DocumentImporter {
   Future<List<String>> pickMedia();
+
+  /// Picks one subtitle file; null when cancelled.
+  Future<String?> pickSubtitle();
+
+  /// Reads a small text document (subtitles, at most 2 MB).
+  Future<String> readText(String uri);
   Future<void> release(String uri);
   Future<bool> hasAccess(String uri);
 }
@@ -77,6 +83,14 @@ class MethodChannelDocumentImporter implements DocumentImporter {
   @override
   Future<List<String>> pickMedia() async =>
       await _channel.invokeListMethod<String>('pickMedia') ?? const [];
+
+  @override
+  Future<String?> pickSubtitle() =>
+      _channel.invokeMethod<String>('pickSubtitle');
+
+  @override
+  Future<String> readText(String uri) async =>
+      await _channel.invokeMethod<String>('readText', {'uri': uri}) ?? '';
 
   @override
   Future<void> release(String uri) =>

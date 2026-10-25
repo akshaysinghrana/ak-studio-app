@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 import 'package:flutter/material.dart' show ThemeMode;
 
 import '../../../shared/data/app_database.dart';
+import '../../player/domain/subtitles.dart';
 
 /// Typed access to `user_preferences` (spec 4.6, ADR 0002).
 class PreferencesRepository {
@@ -12,6 +13,9 @@ class PreferencesRepository {
   static const continueVideoAudioKey =
       'playback.continueVideoAudioInBackground';
   static const themeModeKey = 'appearance.themeMode';
+  static const brightnessGestureKey = 'player.brightnessGesture';
+  static const volumeGestureKey = 'player.volumeGesture';
+  static const subtitleSizeKey = 'player.subtitleSize';
 
   Stream<String?> _watch(String key) =>
       (_db.select(_db.userPreferences)..where((t) => t.key.equals(key)))
@@ -48,4 +52,24 @@ class PreferencesRepository {
 
   Future<void> setThemeMode(ThemeMode mode) =>
       _set(themeModeKey, mode.name, syncEligible: true);
+
+  /// Swipe gestures are off until the user enables them (spec 5.4). They
+  /// are device-specific, so they never sync.
+  Stream<bool> watchBrightnessGesture() =>
+      _watch(brightnessGestureKey).map((v) => v == 'true');
+
+  Future<void> setBrightnessGesture(bool on) =>
+      _set(brightnessGestureKey, '$on', syncEligible: false);
+
+  Stream<bool> watchVolumeGesture() =>
+      _watch(volumeGestureKey).map((v) => v == 'true');
+
+  Future<void> setVolumeGesture(bool on) =>
+      _set(volumeGestureKey, '$on', syncEligible: false);
+
+  Stream<SubtitleSize> watchSubtitleSize() => _watch(subtitleSizeKey)
+      .map((v) => SubtitleSize.values.asNameMap()[v] ?? SubtitleSize.medium);
+
+  Future<void> setSubtitleSize(SubtitleSize size) =>
+      _set(subtitleSizeKey, size.name, syncEligible: true);
 }

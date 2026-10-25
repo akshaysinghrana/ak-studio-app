@@ -12,12 +12,27 @@ import '../../../core/platform/screen_control.dart';
 import '../../playback/application/playback_coordinator.dart';
 import '../../playback/domain/play_queue.dart';
 import '../application/frame_capture_action.dart';
+import '../domain/subtitles.dart';
 import '../domain/video_gestures.dart';
 import 'widgets/playback_debug_panel.dart';
+import 'widgets/player_sheets.dart';
 import 'widgets/queue_sheet.dart';
 import 'widgets/seek_bar.dart';
 
-enum _MenuAction { fit, backgroundAudio, pip, queue, debug }
+enum _MenuAction {
+  fit,
+  speed,
+  subtitles,
+  audioTrack,
+  sleepTimer,
+  rotationLock,
+  backgroundAudio,
+  pip,
+  queue,
+  debug,
+}
+
+enum _GestureKind { brightness, volume }
 
 /// Full-screen video player (spec 5): auto-hiding controls, ±10 s buttons and
 /// double-tap zones, pinch zoom/pan with arbitration, fit modes, controls
@@ -59,6 +74,7 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
     _coordinator = ref.read(coordinatorProvider);
     _coordinator.controller.addListener(_onEngineChanged);
     _onEngineChanged();
+    _transform.addListener(_onZoomChanged);
     ref.read(pictureInPictureProvider).isSupported().then((s) {
       if (mounted) setState(() => _pipSupported = s);
     });
@@ -72,6 +88,9 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
     _seekLabelTimer?.cancel();
     _transform.dispose();
     _screen.keepOn(false);
+    // App brightness only applies while the player is open (spec 5.4).
+    if (_brightness != null) _screen.setBrightness(null);
+    _gestureLabelTimer?.cancel();
     if (_fullscreen) _restoreSystemUi();
     super.dispose();
   }
@@ -84,6 +103,80 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
     _listened = _coordinator.controller.value;
     _listened?.addListener(_onValueChanged);
     _onValueChanged();
+    _refreshAudioTracks();
+  }
+
+  int _audioTrackCount = 0;
+  bool _rotationLocked = false;
+
+  Future<void> _refreshAudioTracks() async {
+    final c = _listened;
+    if (c == null) return;
+    // Wait until the engine reports its tracks after initialisation.
+    if (!c.value.isInitialized) return;
+    final tracks = await _coordinator.audioTracks();
+    if (mounted && c == _listened) {
+      setState(() => _audioTrackCount = tracks.length);
+    }
+  }
+
+  bool _lastZoomed = false;
+
+  void _onZoomChanged() {
+    // Panning is only enabled while zoomed, leaving vertical swipes at 1x to
+    // the brightness/volume gestures.
+    if (_zoomed != _lastZoomed && mounted) {
+      setState(() => _lastZoomed = _zoomed);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Brightness / volume swipe gestures (opt-in, spec 5.4)
+
+  double? _brightness;
+  double? _volume;
+  _GestureKind? _gesture;
+  String? _gestureLabel;
+  Timer? _gestureLabelTimer;
+
+  Future<void> _onVerticalStart(DragStartDetails d, double width) async {
+    final brightnessOn = ref.read(brightnessGestureProvider).value ?? false;
+    final volumeOn = ref.read(volumeGestureProvider).value ?? false;
+    final left = d.localPosition.dx < width / 2;
+    _gesture = left
+        ? (brightnessOn ? _GestureKind.brightness : null)
+        : (volumeOn ? _GestureKind.volume : null);
+    if (_gesture == _GestureKind.brightness) {
+      _brightness ??= await _screen.brightness() ?? 0.5;
+    } else if (_gesture == _GestureKind.volume) {
+      _volume = await _screen.volume();
+    }
+  }
+
+  void _onVerticalUpdate(DragUpdateDetails d, double height) {
+    final delta = -d.delta.dy / (height * 0.8);
+    switch (_gesture) {
+      case _GestureKind.brightness:
+        final v = ((_brightness ?? 0.5) + delta).clamp(0.01, 1.0);
+        _brightness = v;
+        _screen.setBrightness(v);
+        _showGestureLabel('Brightness ${(v * 100).round()}%');
+      case _GestureKind.volume:
+        final v = ((_volume ?? 0.5) + delta).clamp(0.0, 1.0);
+        _volume = v;
+        _screen.setVolume(v);
+        _showGestureLabel('Volume ${(v * 100).round()}%');
+      case null:
+        break;
+    }
+  }
+
+  void _showGestureLabel(String label) {
+    _gestureLabelTimer?.cancel();
+    setState(() => _gestureLabel = label);
+    _gestureLabelTimer = Timer(const Duration(milliseconds: 800), () {
+      if (mounted) setState(() => _gestureLabel = null);
+    });
   }
 
   bool _wasPlaying = false;
@@ -237,6 +330,16 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
         }
       case _MenuAction.queue:
         await showQueueSheet(context);
+      case _MenuAction.speed:
+        await showSpeedSheet(context, _coordinator);
+      case _MenuAction.subtitles:
+        await showSubtitleSheet(context, ref);
+      case _MenuAction.audioTrack:
+        await showAudioTrackSheet(context, _coordinator);
+      case _MenuAction.sleepTimer:
+        await showSleepTimerSheet(context, _coordinator);
+      case _MenuAction.rotationLock:
+        await _toggleRotationLock();
       case _MenuAction.debug:
         await showModalBottomSheet<void>(
           context: context,
@@ -245,6 +348,28 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
           ),
         );
     }
+  }
+
+  Future<void> _toggleRotationLock() async {
+    if (_rotationLocked) {
+      await SystemChrome.setPreferredOrientations(
+        _fullscreen
+            ? const [
+                DeviceOrientation.landscapeLeft,
+                DeviceOrientation.landscapeRight,
+              ]
+            : const [],
+      );
+    } else {
+      final landscape =
+          MediaQuery.orientationOf(context) == Orientation.landscape;
+      await SystemChrome.setPreferredOrientations([
+        landscape
+            ? DeviceOrientation.landscapeLeft
+            : DeviceOrientation.portraitUp,
+      ]);
+    }
+    if (mounted) setState(() => _rotationLocked = !_rotationLocked);
   }
 
   Future<void> _chooseFit() async {
@@ -294,7 +419,9 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
               children: [
                 _surface(controller),
                 _statusLayer(controller),
+                if (controller != null) _captions(controller),
                 if (_seekLabel != null) _seekFeedback(),
+                if (_gestureLabel != null) _gestureFeedback(),
                 if (!_locked)
                   _controls(context, controller, entry?.media.title ?? '')
                 else
@@ -330,16 +457,28 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
             VideoFit.stretch => SizedBox.expand(child: player),
           };
         }
+        final gestures =
+            !_locked &&
+            !_zoomed &&
+            ((ref.watch(brightnessGestureProvider).value ?? false) ||
+                (ref.watch(volumeGestureProvider).value ?? false));
         return GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: _locked ? () => _showControls() : _toggleControls,
           onDoubleTapDown: (d) => _doubleTapPosition = d.localPosition,
           onDoubleTap: () => _onDoubleTap(constraints.maxWidth),
+          onVerticalDragStart: gestures
+              ? (d) => _onVerticalStart(d, constraints.maxWidth)
+              : null,
+          onVerticalDragUpdate: gestures
+              ? (d) => _onVerticalUpdate(d, constraints.maxHeight)
+              : null,
+          onVerticalDragEnd: gestures ? (_) => _gesture = null : null,
           child: InteractiveViewer(
             transformationController: _transform,
             minScale: _minZoom,
             maxScale: _maxZoom,
-            panEnabled: !_locked,
+            panEnabled: !_locked && _zoomed,
             scaleEnabled: !_locked,
             // Zero margin keeps the video from being panned off-screen.
             boundaryMargin: EdgeInsets.zero,
@@ -394,6 +533,53 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
               : const SizedBox.shrink(),
         );
       },
+    );
+  }
+
+  Widget _captions(VideoPlayerController controller) {
+    final size = ref.watch(subtitleSizeProvider).value ?? SubtitleSize.medium;
+    final fontSize = switch (size) {
+      SubtitleSize.small => 14.0,
+      SubtitleSize.medium => 18.0,
+      SubtitleSize.large => 24.0,
+    };
+    return ValueListenableBuilder<VideoPlayerValue>(
+      valueListenable: controller,
+      builder: (context, v, _) => Positioned(
+        left: 24,
+        right: 24,
+        bottom: _controlsVisible && !_locked ? 140 : 32,
+        child: IgnorePointer(
+          child: ClosedCaption(
+            text: v.caption.text,
+            textStyle: TextStyle(fontSize: fontSize, color: Colors.white),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _gestureFeedback() {
+    return Align(
+      alignment: const Alignment(0, -0.5),
+      child: IgnorePointer(
+        child: Semantics(
+          liveRegion: true,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: Colors.black54,
+              borderRadius: BorderRadius.circular(24),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Text(
+                _gestureLabel!,
+                style: const TextStyle(color: Colors.white, fontSize: 18),
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -541,6 +727,38 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
               const PopupMenuItem(
                 value: _MenuAction.fit,
                 child: Text('Aspect ratio'),
+              ),
+              PopupMenuItem(
+                value: _MenuAction.speed,
+                child: Text(
+                  'Playback speed (${speedLabel(_coordinator.speed.value)})',
+                ),
+              ),
+              PopupMenuItem(
+                value: _MenuAction.subtitles,
+                child: Text(
+                  _coordinator.subtitles.value == null
+                      ? 'Subtitles'
+                      : 'Subtitles (on)',
+                ),
+              ),
+              if (_audioTrackCount > 1)
+                const PopupMenuItem(
+                  value: _MenuAction.audioTrack,
+                  child: Text('Audio track'),
+                ),
+              PopupMenuItem(
+                value: _MenuAction.sleepTimer,
+                child: Text(
+                  _coordinator.sleepTimer.value == null
+                      ? 'Sleep timer'
+                      : 'Sleep timer (on)',
+                ),
+              ),
+              CheckedPopupMenuItem(
+                value: _MenuAction.rotationLock,
+                checked: _rotationLocked,
+                child: const Text('Lock rotation'),
               ),
               CheckedPopupMenuItem(
                 value: _MenuAction.backgroundAudio,
