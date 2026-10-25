@@ -1,6 +1,7 @@
 package com.akshayrana.video_music_app
 
 import android.app.PictureInPictureParams
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.os.Build
@@ -20,12 +21,18 @@ class MainActivity : AudioServiceActivity() {
     }
 
     private var pipChannel: MethodChannel? = null
+    private var documentImporter: DocumentImporter? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         val messenger = flutterEngine.dartExecutor.binaryMessenger
         MethodChannel(messenger, FrameCapture.CHANNEL)
             .setMethodCallHandler(FrameCapture(applicationContext))
+        MethodChannel(messenger, MediaStoreScanner.CHANNEL)
+            .setMethodCallHandler(MediaStoreScanner(applicationContext))
+        documentImporter = DocumentImporter(this).also {
+            MethodChannel(messenger, DocumentImporter.CHANNEL).setMethodCallHandler(it)
+        }
         pipChannel = MethodChannel(messenger, PIP_CHANNEL).apply {
             setMethodCallHandler { call, result ->
                 when (call.method) {
@@ -57,6 +64,13 @@ class MainActivity : AudioServiceActivity() {
         } catch (e: IllegalStateException) {
             false
         }
+    }
+
+    @Deprecated("Activity result API is unavailable on FlutterActivity")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        if (documentImporter?.onActivityResult(requestCode, resultCode, data) == true) return
+        @Suppress("DEPRECATION")
+        super.onActivityResult(requestCode, resultCode, data)
     }
 
     override fun onPictureInPictureModeChanged(

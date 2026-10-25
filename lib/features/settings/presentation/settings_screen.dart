@@ -1,0 +1,151 @@
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+
+import '../../../app/providers.dart';
+import '../../../app/router.dart';
+import '../../../core/permissions/media_permissions.dart';
+import '../../library/application/library_providers.dart';
+import '../../library/presentation/library_actions.dart';
+import '../../player/presentation/widgets/background_audio_switch.dart';
+import '../../playback/domain/media_source.dart';
+
+/// Settings (spec 4.6). Account and sync arrive in Phase 6; until then no
+/// account controls are shown.
+class SettingsScreen extends ConsumerStatefulWidget {
+  const SettingsScreen({super.key});
+
+  @override
+  ConsumerState<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends ConsumerState<SettingsScreen> {
+  late final AppLifecycleListener _lifecycle;
+
+  @override
+  void initState() {
+    super.initState();
+    // Re-read permission status when returning from system settings.
+    _lifecycle = AppLifecycleListener(
+      onResume: () => ref.invalidate(mediaAccessProvider),
+    );
+  }
+
+  @override
+  void dispose() {
+    _lifecycle.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final coordinator = ref.watch(coordinatorProvider);
+    final themeMode = ref.watch(themeModeProvider).value ?? ThemeMode.dark;
+    final access = ref.watch(mediaAccessProvider).value;
+    final scanBusy = ref.watch(scanControllerProvider).busy;
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Settings')),
+      body: ListView(
+        children: [
+          const _Header('Playback'),
+          BackgroundAudioSwitch(coordinator: coordinator),
+          const ListTile(
+            title: Text('Seek step'),
+            subtitle: Text('Rewind and forward move 10 seconds.'),
+          ),
+          const _Header('Appearance'),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: SegmentedButton<ThemeMode>(
+              segments: const [
+                ButtonSegment(value: ThemeMode.dark, label: Text('Dark')),
+                ButtonSegment(value: ThemeMode.light, label: Text('Light')),
+                ButtonSegment(value: ThemeMode.system, label: Text('System')),
+              ],
+              selected: {themeMode},
+              onSelectionChanged: (s) =>
+                  ref.read(preferencesProvider).setThemeMode(s.single),
+            ),
+          ),
+          const _Header('Library'),
+          ListTile(
+            leading: const Icon(Icons.search),
+            title: const Text('Scan library'),
+            subtitle: const Text(
+              'Find MP4 and MP3 files on this device. Files are not uploaded.',
+            ),
+            enabled: !scanBusy,
+            onTap: () => LibraryActions.scan(context, ref),
+          ),
+          ListTile(
+            leading: const Icon(Icons.folder_open),
+            title: const Text('Choose files'),
+            subtitle: const Text(
+              'Add individual files with the system picker.',
+            ),
+            onTap: () => LibraryActions.importFiles(context, ref),
+          ),
+          ListTile(
+            leading: const Icon(Icons.lock_outline),
+            title: const Text('Media access'),
+            subtitle: Text(
+              access == null
+                  ? 'Checking…'
+                  : 'Videos: ${_label(access[MediaKind.video]!)} · '
+                        'Audio: ${_label(access[MediaKind.audio]!)}',
+            ),
+            trailing: TextButton(
+              onPressed: () =>
+                  ref.read(mediaPermissionsProvider).openSettings(),
+              child: const Text('System settings'),
+            ),
+          ),
+          const _Header('About'),
+          const ListTile(
+            title: Text('Privacy'),
+            subtitle: Text(
+              'Your media files and library stay on this device. No analytics '
+              'are collected.',
+            ),
+          ),
+          if (kDebugMode) ...[
+            const _Header('Developer'),
+            ListTile(
+              leading: const Icon(Icons.bug_report_outlined),
+              title: const Text('Engine test screen'),
+              onTap: () => context.push(Routes.debugEngine),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  static String _label(MediaAccess a) => switch (a) {
+    MediaAccess.granted => 'allowed',
+    MediaAccess.limited => 'selected items only',
+    MediaAccess.denied => 'not allowed',
+    MediaAccess.permanentlyDenied => 'blocked (change in system settings)',
+  };
+}
+
+class _Header extends StatelessWidget {
+  const _Header(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
+    child: Semantics(
+      header: true,
+      child: Text(
+        text,
+        style: Theme.of(context).textTheme.labelLarge
+            ?.copyWith(color: Theme.of(context).colorScheme.primary),
+      ),
+    ),
+  );
+}

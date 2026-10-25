@@ -2,6 +2,8 @@
 
 Local-first Flutter player for MP4 and MP3 files. Android only for now. The product and engineering source of truth is [MEDIA_PLAYER_SPEC.md](MEDIA_PLAYER_SPEC.md). Working rules are in [CLAUDE.md](CLAUDE.md).
 
+**Status:** Phase 2 (app shell, library, persistence) done; see [docs/testing/phase2-results.md](docs/testing/phase2-results.md).
+
 **Media engine:** [docs/adr/0001-media-engine.md](docs/adr/0001-media-engine.md). Device evidence: [docs/testing/phase1-device-results.md](docs/testing/phase1-device-results.md).
 
 ## Develop
@@ -17,6 +19,9 @@ flutter run   # on a physical Android device
 ```sh
 # On-device engine and zoom tests (generates and pushes synthetic media)
 scripts/run_device_engine_tests.sh <device-id>
+
+# Library against the real MediaStore (adds then removes Movies/Music/UMP_Test)
+scripts/run_device_library_test.sh <device-id>
 
 # OS lifecycle checks: lock, Home, media keys, PiP, battery saver, ...
 D=/storage/emulated/0/Android/data/com.akshayrana.video_music_app/files/test_media

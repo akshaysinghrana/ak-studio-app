@@ -163,12 +163,18 @@ def media(cmd):
 
 
 def ensure(state):
-    """Reach PLAYING/PAUSED with the toggle key (explicit PLAY/PAUSE keys are
-    treated as toggles by audio_service; see check 'explicit_keys')."""
-    for _ in range(3):
+    """Reach PLAYING/PAUSED with the play-pause key. Until the app's session
+    has been active once (e.g. right after a reinstall), the system routes
+    keys to a stale receiver, so fall back to the in-app Play/Pause button."""
+    for attempt in range(4):
         if session()["state"] == state:
             return True
-        media("play-pause")
+        if attempt < 2:
+            media("play-pause")
+        else:
+            button = find("Play" if state == "PLAYING" else "Pause")
+            if button:
+                tap(button)
         time.sleep(1.5)
     return session()["state"] == state
 
@@ -384,9 +390,16 @@ def check_lock_setting_on_and_controls():
             return session()
         s1 = tap_pt("play"); steps.append(("pause", s1["state"] == "PAUSED", s1["state"]))
         s1 = tap_pt("play"); steps.append(("play", s1["state"] == "PLAYING", s1["state"]))
-        # Previous within 3 s of the start goes back (spec 7.1), so tap quickly.
-        s1 = tap_pt("next", wait=1.2); steps.append(("next", s1["title"] == "ump_tone", s1["title"]))
-        s1 = tap_pt("previous"); steps.append(("previous", s1["title"] == "ump_long", s1["title"]))
+        s1 = tap_pt("next"); steps.append(("next", s1["title"] == "ump_tone", s1["title"]))
+        # Spec 7.1: previous goes back within 3 s of the start, else restarts.
+        before = session()
+        s1 = tap_pt("previous")
+        if before["pos"] < 3:
+            ok = s1["title"] == "ump_long"
+        else:
+            ok = s1["title"] == before["title"] and s1["pos"] < 3
+        steps.append(("previous", ok, f"from {before['title']}@{before['pos']:.1f}s -> "
+                                      f"{s1['title']}@{s1['pos']:.1f}s"))
         record(
             "9c lock-screen media card controls change real playback",
             on_keyguard and all(ok for _, ok, _ in steps),

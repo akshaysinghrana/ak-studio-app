@@ -7,10 +7,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:drift/native.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:video_music_app/app/app.dart';
+import 'package:video_music_app/app/providers.dart';
+import 'package:video_music_app/app/router.dart';
 import 'package:video_music_app/core/platform/picture_in_picture.dart';
 import 'package:video_music_app/features/playback/application/playback_coordinator.dart';
 import 'package:video_music_app/features/playback/domain/media_source.dart';
-import 'package:video_music_app/main.dart';
+import 'package:video_music_app/shared/data/app_database.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -26,8 +31,20 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 200));
     }
 
+    // The debug engine screen hosts the same PlayerArea as Now Playing.
     await tester.pumpWidget(
-      MediaPlayerApp(coordinator: coordinator, pip: PictureInPicture()),
+      ProviderScope(
+        overrides: [
+          databaseProvider.overrideWithValue(
+            AppDatabase(NativeDatabase.memory()),
+          ),
+          coordinatorProvider.overrideWithValue(coordinator),
+          pictureInPictureProvider.overrideWithValue(PictureInPicture()),
+        ],
+        child: MediaPlayerApp(
+          router: buildRouter(initialLocation: Routes.debugEngine),
+        ),
+      ),
     );
     await coordinator.playNow([
       MediaSource.fromFile(path: '$dir/ump_long.mp4', name: 'ump_long.mp4')!,
@@ -47,10 +64,13 @@ void main() {
     final viewport = tester.getRect(viewer);
     final position = coordinator.controller.value!.value.position;
 
-    Future<void> pinch(double spread) async {
+    /// Two fingers start [gap] apart and each moves [spread]/2 outward
+    /// (negative = inward). Inward moves never let the fingers cross.
+    Future<void> pinch(double spread, {double gap = 80}) async {
+      assert(gap + spread > 0, 'fingers would cross');
       final c = viewport.center;
-      final a = await tester.startGesture(c - const Offset(40, 0), pointer: 1);
-      final b = await tester.startGesture(c + const Offset(40, 0), pointer: 2);
+      final a = await tester.startGesture(c - Offset(gap / 2, 0), pointer: 1);
+      final b = await tester.startGesture(c + Offset(gap / 2, 0), pointer: 2);
       for (var i = 0; i < 10; i++) {
         await a.moveBy(Offset(-spread / 20, 0));
         await b.moveBy(Offset(spread / 20, 0));
@@ -99,8 +119,10 @@ void main() {
       expectCoversViewport();
     }
 
-    // Pinch in never goes below 1x.
-    await pinch(-2000);
+    // Pinch in never goes below 1x (fingers end at 20% of their start gap,
+    // so 4x would become 0.8x). Both fingers must start inside the viewport.
+    final gap = viewport.width * 0.8;
+    await pinch(-gap * 0.8, gap: gap);
     expect(scale(), closeTo(1.0, 0.01));
 
     // Explicit reset.

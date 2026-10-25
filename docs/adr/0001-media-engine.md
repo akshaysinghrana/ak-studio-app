@@ -1,6 +1,6 @@
 # ADR 0001 — Media engine
 
-- **Status:** Accepted for Android on 2026-10-26, based on physical-device evidence (see below). A few follow-up checks are still open. iOS has not been evaluated yet.
+- **Status:** Accepted for Android on 2026-10-26, based on physical-device evidence (see below). Only the headphone-unplug check is still open; it needs hardware. iOS has not been evaluated yet.
 - **Date:** 2026-10-25
 - **Scope:** Android first. iOS will be evaluated in its own spike before any iOS release.
 
@@ -70,10 +70,10 @@ Full results: `docs/testing/phase1-device-results.md`. The device was a Motorola
 | 1. MP4 plays with audio | PASS |
 | 2. Lock: audio continues only when the setting is enabled | PASS. Setting off: paused, 0 players. Setting on: 90.2 s of audio over 90.2 s with a secure keyguard, 1 player (3 runs) |
 | 3. Pause, seek, next and previous from system media controls | PASS: media keys, notification shade, and lock-screen card (pause/play/next) |
-| 4. Unlock: video and audio in sync, audio not doubled | No double audio (1 player after wake). The picture-sync check after a secure unlock needs a person to unlock; re-run pending |
+| 4. Unlock: video and audio in sync, audio not doubled | PASS: after a real secure unlock, the on-screen frame matches the session second and there is 1 player. The same holds after Home → reopen |
 | 5. Setting off: defined pause behaviour | PASS: lock and Home both pause, with no auto-resume |
 | 6. MP3 stable while locked | PASS: 150.2 s over 150.1 s |
 | Frame capture is the real decoded frame | PASS: source resolution; the encoded second matches the player position |
-| Zoom on the real texture | PASS for double-tap and reset. On-device pinch test pending |
+| Zoom on the real texture | PASS: pinch, 1×–4× clamps, pan bounds, reset, double-tap (on-device `zoom_test`) |
 | `flutter analyze`, unit tests, debug/release builds | PASS |
 | Physical iPhone | **Not run.** The iOS platform has not been created yet |

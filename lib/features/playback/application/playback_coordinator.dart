@@ -11,6 +11,7 @@ import '../domain/background_policy.dart';
 import '../domain/media_source.dart';
 import '../domain/play_queue.dart';
 import '../domain/seek.dart';
+import 'playback_progress_store.dart';
 
 /// Single source of truth for the current media, queue, position, play intent
 /// and background state (spec 8.3, 10.4).
@@ -22,13 +23,21 @@ import '../domain/seek.dart';
 /// UI, notification, lock screen and headset buttons all call the
 /// [BaseAudioHandler] overrides below.
 class PlaybackCoordinator extends BaseAudioHandler with SeekHandler {
-  PlaybackCoordinator._();
+  PlaybackCoordinator._(this._progressStore, this._onLoadError);
 
-  static Future<PlaybackCoordinator> init() async {
+  /// [onLoadError] lets the library re-check a file that failed to open
+  /// (missing, revoked grant or corrupt).
+  static Future<PlaybackCoordinator> init({
+    PlaybackProgressStore? progressStore,
+    void Function(MediaSource media)? onLoadError,
+  }) async {
     final session = await AudioSession.instance;
     await session.configure(const AudioSessionConfiguration.music());
     final coordinator = await AudioService.init(
-      builder: PlaybackCoordinator._,
+      builder: () => PlaybackCoordinator._(
+        progressStore ?? InMemoryPlaybackProgressStore(),
+        onLoadError,
+      ),
       config: const AudioServiceConfig(
         androidNotificationChannelId: 'com.akshayrana.video_music_app.playback',
         androidNotificationChannelName: 'Playback',
@@ -59,8 +68,9 @@ class PlaybackCoordinator extends BaseAudioHandler with SeekHandler {
   /// Recent coordinator events, shown only in debug builds.
   final ValueNotifier<List<String>> debugEvents = ValueNotifier(const []);
 
-  // TODO(phase-2): persist to Drift; in-memory only for the Phase 1 POC.
-  final Map<String, Duration> _savedPositions = {};
+  final PlaybackProgressStore _progressStore;
+  final void Function(MediaSource media)? _onLoadError;
+  Timer? _progressTimer;
 
   late final AppLifecycleListener _lifecycle;
   final List<StreamSubscription<Object?>> _subscriptions = [];
@@ -276,6 +286,7 @@ class PlaybackCoordinator extends BaseAudioHandler with SeekHandler {
       await c.dispose();
       if (generation != _loadGeneration) return;
       _log('load failed: $e');
+      _onLoadError?.call(media);
       playbackState.add(
         playbackState.value.copyWith(
           processingState: AudioProcessingState.error,
@@ -294,8 +305,14 @@ class PlaybackCoordinator extends BaseAudioHandler with SeekHandler {
 
     _completionHandled = false;
     mediaItem.add(_toMediaItem(entry, duration: c.value.duration));
-    final saved = _savedPositions[media.id];
-    if (saved != null && saved < c.value.duration - kSeekStep) {
+    final saved = await _progressStore.resumePosition(media.id);
+    if (generation != _loadGeneration) {
+      await c.dispose();
+      return;
+    }
+    if (saved != null &&
+        saved > Duration.zero &&
+        saved < c.value.duration - kSeekStep) {
       await c.seekTo(saved);
     }
     // Change detection must start fresh for the new engine; otherwise a
@@ -311,6 +328,8 @@ class PlaybackCoordinator extends BaseAudioHandler with SeekHandler {
   }
 
   Future<void> _disposeController() async {
+    _progressTimer?.cancel();
+    _progressTimer = null;
     final old = controller.value;
     if (old == null) return;
     controller.value = null;
@@ -343,11 +362,12 @@ class PlaybackCoordinator extends BaseAudioHandler with SeekHandler {
     // Only broadcast on state changes; audio_service extrapolates position.
     if (v.isPlaying != _lastPlaying || v.isBuffering != _lastBuffering) {
       _broadcast();
+      _updateProgressTimer(v.isPlaying);
     }
   }
 
   Future<void> _onCompleted() async {
-    _savedPositions.remove(_queue.current?.media.id);
+    _savePosition(completed: true);
     if (_queue.hasNext) {
       _setQueue(_queue.next());
       await _loadCurrent(autoplay: _autoplayAllowed());
@@ -406,11 +426,27 @@ class PlaybackCoordinator extends BaseAudioHandler with SeekHandler {
     await seek(seekBy(c.value.position, delta, c.value.duration));
   }
 
-  void _savePosition() {
+  void _updateProgressTimer(bool playing) {
+    if (!playing) {
+      _progressTimer?.cancel();
+      _progressTimer = null;
+    } else {
+      _progressTimer ??= Timer.periodic(
+        PlaybackProgressStore.periodicSaveInterval,
+        (_) => _savePosition(),
+      );
+    }
+  }
+
+  void _savePosition({bool completed = false}) {
     final entry = _queue.current;
     final c = controller.value;
-    if (entry == null || c == null) return;
-    _savedPositions[entry.media.id] = c.value.position;
+    if (entry == null || c == null || !c.value.isInitialized) return;
+    unawaited(
+      _progressStore
+          .save(entry.media.id, c.value.position, completed: completed)
+          .catchError((Object e) => _log('progress save failed: $e')),
+    );
   }
 
   void _setQueue(PlayQueue next) {

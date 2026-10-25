@@ -11,7 +11,8 @@ PKG=com.akshayrana.video_music_app
 cd "$ROOT"
 FILES=("$@")
 if [ ${#FILES[@]} -eq 0 ]; then
-  FILES=($(cd integration_test && ls *_test.dart))
+  # library_test.dart needs MediaStore setup: scripts/run_device_library_test.sh
+  FILES=(engine_test.dart zoom_test.dart)
 fi
 STATUS=0
 for f in "${FILES[@]}"; do
