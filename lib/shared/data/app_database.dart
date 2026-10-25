@@ -1,5 +1,9 @@
+import 'dart:io';
+
 import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 
 import '../../features/playback/domain/media_source.dart';
 
@@ -181,7 +185,27 @@ class SyncMetadata extends Table {
 class AppDatabase extends _$AppDatabase {
   AppDatabase(super.executor);
 
-  AppDatabase.open() : super(driftDatabase(name: 'unified_media_player'));
+  AppDatabase.open() : super(driftDatabase(name: _name));
+
+  static const _name = 'unified_media_player';
+
+  static Future<void> deleteDatabaseFile() async {
+    // drift_flutter default: <documents>/<name>.sqlite
+    final dir = await getApplicationDocumentsDirectory();
+    for (final suffix in ['', '-wal', '-shm', '-journal']) {
+      final file = File(p.join(dir.path, '$_name.sqlite$suffix'));
+      if (await file.exists()) await file.delete();
+    }
+  }
+
+  /// Deletes the database file after a failed open (startup error screen).
+  /// The next launch recreates an empty schema.
+  Future<void> wipe() async {
+    try {
+      await close();
+    } catch (_) {}
+    await deleteDatabaseFile();
+  }
 
   @override
   int get schemaVersion => 3;

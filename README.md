@@ -2,7 +2,7 @@
 
 Local-first Flutter player for MP4 and MP3 files. Android only for now. The product and engineering source of truth is [MEDIA_PLAYER_SPEC.md](MEDIA_PLAYER_SPEC.md). Working rules are in [CLAUDE.md](CLAUDE.md).
 
-**Status:** Phase 2 (app shell, library, persistence) done; see [docs/testing/phase2-results.md](docs/testing/phase2-results.md).
+**Status:** Phases 0–8 implemented (Android). The final on-device pass is pending; see [docs/testing/final-device-test-plan.md](docs/testing/final-device-test-plan.md). Decisions: ADRs [0001](docs/adr/0001-media-engine.md) (engine), [0002](docs/adr/0002-local-storage-and-media-access.md) (storage and media access), [0003](docs/adr/0003-auth-and-sync.md) (accounts and sync).
 
 **Media engine:** [docs/adr/0001-media-engine.md](docs/adr/0001-media-engine.md). Device evidence: [docs/testing/phase1-device-results.md](docs/testing/phase1-device-results.md).
 
@@ -47,6 +47,14 @@ keyPassword=...
 ```
 
 Without that file, release builds are signed with the debug key. Those builds are fine for local testing but must not be published.
+
+## Release checklist
+
+- [ ] Final device test plan passed
+- [ ] Release keystore in `android/key.properties`
+- [ ] Firebase configured (`flutterfire configure`), `firestore.rules` deployed, or accounts left unconfigured on purpose
+- [ ] `docs/PRIVACY.md` completed and published; Play Data safety form filled in from it
+- [ ] `flutter build appbundle` (per-device download is about 23–27 MB)
 
 ## Third-party patches
 

@@ -9,6 +9,7 @@ import '../../../core/permissions/media_permissions.dart';
 import '../../library/application/library_providers.dart';
 import '../../library/presentation/library_actions.dart';
 import '../../player/domain/subtitles.dart';
+import 'privacy_screen.dart';
 import '../../player/presentation/widgets/background_audio_switch.dart';
 import '../../playback/domain/media_source.dart';
 
@@ -167,12 +168,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
           ),
           const _Header('About'),
-          const ListTile(
-            title: Text('Privacy'),
-            subtitle: Text(
-              'Your media files and library stay on this device. If you sign '
-              'in, only playlists, favourites and settings sync, using '
-              'anonymous file fingerprints. No analytics are collected.',
+          ListTile(
+            leading: const Icon(Icons.privacy_tip_outlined),
+            title: const Text('Privacy'),
+            subtitle: const Text('What stays on this device and what syncs'),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const PrivacyScreen()),
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.description_outlined),
+            title: const Text('Open-source licences'),
+            onTap: () => showLicensePage(
+              context: context,
+              applicationName: 'Unified Media Player',
             ),
           ),
           if (kDebugMode) ...[

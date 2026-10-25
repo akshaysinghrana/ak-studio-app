@@ -53,6 +53,8 @@ class PlaybackCoordinator extends BaseAudioHandler with SeekHandler {
       config: const AudioServiceConfig(
         androidNotificationChannelId: 'com.akshayrana.video_music_app.playback',
         androidNotificationChannelName: 'Playback',
+        // Monochrome status-bar glyph (android/app/src/main/res/drawable).
+        androidNotificationIcon: 'drawable/ic_stat_player',
         // Keep the service in the foreground while paused so resuming from
         // the lock screen cannot hit Android 12+ background-start limits.
         androidStopForegroundOnPause: false,

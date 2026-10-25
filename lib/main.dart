@@ -11,6 +11,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'app/app.dart';
 import 'app/providers.dart';
 import 'app/router.dart';
+import 'app/startup_error_app.dart';
 import 'core/platform/media_store.dart';
 import 'features/account/data/auth_repository.dart';
 import 'core/platform/picture_in_picture.dart';
@@ -33,6 +34,13 @@ const _debugAutoload = String.fromEnvironment('UMP_DEBUG_AUTOLOAD');
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final db = AppDatabase.open();
+  try {
+    // Opening runs migrations; fail visibly instead of crashing (spec 12).
+    await db.customSelect('SELECT 1').get();
+  } catch (e) {
+    runApp(StartupErrorApp(error: e, database: db));
+    return;
+  }
 
   // Accounts only when this build has a real Firebase project (ADR 0003);
   // otherwise guest mode, and the UI says accounts are not set up.

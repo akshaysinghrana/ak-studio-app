@@ -121,4 +121,40 @@ void main() {
     expect(find.text('Song B'), findsOneWidget);
     await unmount(tester);
   });
+
+  testWidgets('large text (2x) renders without layout overflow', (
+    tester,
+  ) async {
+    store.videos = [
+      record(
+        1,
+        title: 'A rather long video title that wraps',
+        durationMs: 3725000,
+      ),
+    ];
+    await index(tester);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          databaseProvider.overrideWithValue(db),
+          mediaStoreProvider.overrideWithValue(store),
+          documentImporterProvider.overrideWithValue(FakeDocumentImporter()),
+          mediaPermissionsProvider.overrideWithValue(
+            FakeMediaPermissions({
+              MediaKind.video: MediaAccess.granted,
+              MediaKind.audio: MediaAccess.granted,
+            }),
+          ),
+        ],
+        child: const MediaQuery(
+          data: MediaQueryData(textScaler: TextScaler.linear(2)),
+          child: MaterialApp(home: MediaListScreen(kind: MediaKind.video)),
+        ),
+      ),
+    );
+    await settle(tester);
+    expect(tester.takeException(), isNull);
+    expect(find.textContaining('A rather long'), findsOneWidget);
+    await unmount(tester);
+  });
 }
