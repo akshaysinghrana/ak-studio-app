@@ -15,6 +15,19 @@ class MediaSource {
   final String locator;
   final MediaKind kind;
 
+  /// Builds a source for a supported local file, or null for other types.
+  /// Phase 1 uses the path as the ID; Phase 2 replaces it with a stable app ID.
+  static MediaSource? fromFile({required String path, required String name}) {
+    final kind = kindForFileName(name);
+    if (kind == null) return null;
+    return MediaSource(
+      id: path,
+      title: name.replaceAll(RegExp(r'\.(mp4|mp3)$', caseSensitive: false), ''),
+      locator: path,
+      kind: kind,
+    );
+  }
+
   static MediaKind? kindForFileName(String name) {
     final lower = name.toLowerCase();
     if (lower.endsWith('.mp4')) return MediaKind.video;

@@ -1,6 +1,6 @@
 # Phase 1 — physical Android device checklist (spec 8.4)
 
-An emulator does not count as evidence. Run a **debug** build: `flutter run` with the phone connected over USB, and keep the on-screen DEBUG panel and the `[playback]` log lines visible.
+An emulator does not count as evidence. Most rows are automated; see the "Device tests" section of `README.md`. Results: `phase1-device-results.md`. Run a **debug** build: `flutter run` with the phone connected over USB, and keep the on-screen DEBUG panel and the `[playback]` log lines visible.
 
 Prepare these files on the phone: a long MP4 with audio, a clip shorter than 10 s, a portrait MP4, an MP3, and a corrupt or renamed `.mp4`.
 
@@ -27,3 +27,5 @@ Record for each run: device model, Android version, result (pass/fail) and notes
 | 17 | Queue: add 3 items, tap a queue item, let an item finish | Jumps to the tapped item. Advances on completion. Stops cleanly at the end |
 | 18 | Battery saver on, repeat test 8 | Note the result |
 | 19 | Swipe the app away from recents while playing | Playback stops and the notification is removed |
+| 20 | Picture-in-picture button | Window is pinned, audio continues, and it expands back to the full UI |
+| 21 | Bluetooth/car explicit PAUSE while paused (`adb shell cmd media_session dispatch pause`) | Stays paused |

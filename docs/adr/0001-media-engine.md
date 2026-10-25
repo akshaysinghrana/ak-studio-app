@@ -1,6 +1,6 @@
 # ADR 0001 — Media engine
 
-- **Status:** Proposed. Waiting on physical Android device evidence (see "Evidence" below). iOS has not been evaluated yet.
+- **Status:** Accepted for Android on 2026-10-26, based on physical-device evidence (see below). A few follow-up checks are still open. iOS has not been evaluated yet.
 - **Date:** 2026-10-25
 - **Scope:** Android first. iOS will be evaluated in its own spike before any iOS release.
 
@@ -27,7 +27,7 @@ Toolchain checked on 2026-10-25: Flutter 3.47.8, Dart 3.13.7, AGP 9.1.0, Gradle 
 | A3. `media_kit` (libmpv) for both | Single engine | Built-in `screenshot()` | Texture | media_kit 1.2.6 (**2025-12-13**), media_kit_libs_video 1.0.7 (2025-10-05): no release for about 10 months, which predates Flutter 3.47 / AGP 9 | Bundles libmpv and FFmpeg (LGPL obligations). Adds roughly 20–30 MB per ABI. |
 | B. Native Media3 `MediaSessionService` bridge | Native | Native | Needs a platform view or texture integration | n/a (our own code) | Most build and maintenance cost |
 
-## Decision (proposed)
+## Decision
 
 Adopt **A1** for the Phase 1 proof of concept:
 
@@ -56,18 +56,24 @@ Adopt **A1** for the Phase 1 proof of concept:
 
 1. `MediaMetadataRetriever` decodes independently of the live player. On some devices or files, `OPTION_CLOSEST` may be slow or may return a frame that differs slightly from the one on screen. Must be checked on a device, including portrait, 4K and HDR files.
 2. `video_player` exposes no audio or subtitle track API. That is P1 work and may push us to A3 or B for Phase 7.
-3. `androidStopForegroundOnPause: false` keeps the notification non-dismissible while paused. It avoids Android 12+ `ForegroundServiceStartNotAllowedException` when the user resumes from the lock screen. Revisit after device testing.
-4. `file_picker` copies picked files into the app cache, which is costly for large videos. Phase 2 will use MediaStore `content://` URIs; the coordinator already accepts them.
-5. Fat release APK is 50.8 MB. Use `--split-per-abi` or an App Bundle for distribution.
+3. `androidStopForegroundOnPause: false` keeps the notification non-dismissible while paused. It avoids Android 12+ `ForegroundServiceStartNotAllowedException` when the user resumes from the lock screen. Lock-screen resume worked on the device with this setting.
+4. `file_picker` copies picked files into the app cache, which is costly for large videos. Phase 2 replaces it with MediaStore `content://` URIs and SAF documents with persistable permissions (ADR 0002).
+5. Fat release APK is 50.8 MB. Distribute as an App Bundle (`flutter build appbundle`), which Play splits per device.
+6. Upstream `audio_service` routes explicit `KEYCODE_MEDIA_PLAY`/`PAUSE` keys to a toggle. A Bluetooth or car PAUSE while paused started playback on the device. Patched locally (`third_party/audio_service/UMP_PATCH.md`); re-check on every upgrade.
 
 ## Evidence
 
+Full results: `docs/testing/phase1-device-results.md`. The device was a Motorola Edge 50 Pro on Android 16.
+
 | Check (spec 8.4) | Result |
 |---|---|
-| `flutter analyze` | Pass (no issues) |
-| Unit tests (seek clamping, queue, previous threshold, background policy) | Pass (18 tests) |
-| `flutter build apk --debug` / `--release` | Pass |
-| Physical Android device checks | **Not run.** No device was connected. See `docs/testing/phase1-device-checklist.md` |
-| Physical iPhone checks | **Not run.** iOS platform not created yet; Xcode installation incomplete on the build machine |
-
-The status moves to **Accepted** only after the device checklist passes on at least one physical Android device.
+| 1. MP4 plays with audio | PASS |
+| 2. Lock: audio continues only when the setting is enabled | PASS. Setting off: paused, 0 players. Setting on: 90.2 s of audio over 90.2 s with a secure keyguard, 1 player (3 runs) |
+| 3. Pause, seek, next and previous from system media controls | PASS: media keys, notification shade, and lock-screen card (pause/play/next) |
+| 4. Unlock: video and audio in sync, audio not doubled | No double audio (1 player after wake). The picture-sync check after a secure unlock needs a person to unlock; re-run pending |
+| 5. Setting off: defined pause behaviour | PASS: lock and Home both pause, with no auto-resume |
+| 6. MP3 stable while locked | PASS: 150.2 s over 150.1 s |
+| Frame capture is the real decoded frame | PASS: source resolution; the encoded second matches the player position |
+| Zoom on the real texture | PASS for double-tap and reset. On-device pinch test pending |
+| `flutter analyze`, unit tests, debug/release builds | PASS |
+| Physical iPhone | **Not run.** The iOS platform has not been created yet |

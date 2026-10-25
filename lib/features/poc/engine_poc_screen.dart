@@ -8,6 +8,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:video_player/video_player.dart';
 
 import '../../core/platform/frame_capture.dart';
+import '../../core/platform/picture_in_picture.dart';
 import '../playback/application/playback_coordinator.dart';
 import '../playback/domain/media_source.dart';
 import '../playback/domain/play_queue.dart';
@@ -17,31 +18,24 @@ const _screenshotAlbum = 'Media Player Screenshots';
 /// Temporary Phase 1 screen proving the media engine on a physical device
 /// (spec 8.4). Replaced by the real library/players in Phases 2-3.
 class EnginePocScreen extends StatelessWidget {
-  const EnginePocScreen({super.key, required this.coordinator});
+  const EnginePocScreen({
+    super.key,
+    required this.coordinator,
+    required this.pip,
+  });
 
   final PlaybackCoordinator coordinator;
+  final PictureInPicture pip;
 
   Future<void> _pick(BuildContext context, {required bool replace}) async {
     final files = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: const ['mp4', 'mp3'],
     );
-    final media = <MediaSource>[];
-    for (final f in files) {
-      final kind = MediaSource.kindForFileName(f.name);
-      if (f.path == null || kind == null) continue;
-      media.add(
-        MediaSource(
-          id: f.path!,
-          title: f.name.replaceAll(
-            RegExp(r'\.(mp4|mp3)$', caseSensitive: false),
-            '',
-          ),
-          locator: f.path!,
-          kind: kind,
-        ),
-      );
-    }
+    final media = [
+      for (final f in files)
+        if (f.path != null) MediaSource.fromFile(path: f.path!, name: f.name),
+    ].nonNulls.toList();
     if (media.isEmpty) return;
     if (replace) {
       await coordinator.playNow(media);
@@ -54,6 +48,14 @@ class EnginePocScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return ValueListenableBuilder<bool>(
+      valueListenable: pip.isActive,
+      builder: (context, inPip, _) =>
+          inPip ? _PipView(coordinator: coordinator) : _buildFull(context),
+    );
+  }
+
+  Widget _buildFull(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Engine proof of concept')),
       body: ListView(
@@ -78,7 +80,7 @@ class EnginePocScreen extends StatelessWidget {
               ],
             ),
           ),
-          _PlayerArea(coordinator: coordinator),
+          _PlayerArea(coordinator: coordinator, pip: pip),
           _ErrorBanner(coordinator: coordinator),
           _Transport(coordinator: coordinator),
           _BackgroundSetting(coordinator: coordinator),
@@ -91,9 +93,10 @@ class EnginePocScreen extends StatelessWidget {
 }
 
 class _PlayerArea extends StatelessWidget {
-  const _PlayerArea({required this.coordinator});
+  const _PlayerArea({required this.coordinator, required this.pip});
 
   final PlaybackCoordinator coordinator;
+  final PictureInPicture pip;
 
   @override
   Widget build(BuildContext context) {
@@ -133,6 +136,7 @@ class _PlayerArea extends StatelessWidget {
               key: ValueKey(entry.entryId),
               controller: controller,
               locator: entry.media.locator,
+              pip: pip,
             );
           },
         );
@@ -146,10 +150,12 @@ class _ZoomableVideo extends StatefulWidget {
     super.key,
     required this.controller,
     required this.locator,
+    required this.pip,
   });
 
   final VideoPlayerController controller;
   final String locator;
+  final PictureInPicture pip;
 
   @override
   State<_ZoomableVideo> createState() => _ZoomableVideoState();
@@ -164,6 +170,33 @@ class _ZoomableVideoState extends State<_ZoomableVideo> {
   Offset _doubleTapPosition = Offset.zero;
   bool _cover = false;
   bool _capturing = false;
+  bool _pipSupported = false;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.pip.isSupported().then((supported) {
+      if (mounted) setState(() => _pipSupported = supported);
+    });
+  }
+
+  Future<void> _enterPip() async {
+    final size = widget.controller.value.size;
+    final entered = await widget.pip.enter(
+      width: size.width > 0 ? size.width.round() : 16,
+      height: size.height > 0 ? size.height.round() : 9,
+    );
+    if (!entered && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Picture-in-picture is unavailable. Check that it is allowed '
+            'for this app in system settings.',
+          ),
+        ),
+      );
+    }
+  }
 
   @override
   void dispose() {
@@ -290,9 +323,45 @@ class _ZoomableVideoState extends State<_ZoomableVideo> {
               icon: const Icon(Icons.photo_camera),
               label: const Text('Capture frame'),
             ),
+            if (_pipSupported)
+              TextButton.icon(
+                onPressed: _enterPip,
+                icon: const Icon(Icons.picture_in_picture_alt),
+                label: const Text('Picture-in-picture'),
+              ),
           ],
         ),
       ],
+    );
+  }
+}
+
+/// Minimal layout while in picture-in-picture: video only, no controls.
+class _PipView extends StatelessWidget {
+  const _PipView({required this.coordinator});
+
+  final PlaybackCoordinator coordinator;
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      color: Colors.black,
+      child: ValueListenableBuilder<VideoPlayerController?>(
+        valueListenable: coordinator.controller,
+        builder: (context, controller, _) {
+          if (controller == null || controller.value.size.isEmpty) {
+            return const Center(
+              child: Icon(Icons.music_note, color: Colors.white, size: 48),
+            );
+          }
+          return Center(
+            child: AspectRatio(
+              aspectRatio: controller.value.aspectRatio,
+              child: VideoPlayer(controller),
+            ),
+          );
+        },
+      ),
     );
   }
 }

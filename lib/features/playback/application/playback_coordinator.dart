@@ -80,7 +80,13 @@ class PlaybackCoordinator extends BaseAudioHandler with SeekHandler {
         pause();
       }),
     );
-    continueVideoAudioInBackground.addListener(_applyBackgroundPolicy);
+    continueVideoAudioInBackground.addListener(() {
+      _log(
+        'setting continueVideoAudioInBackground='
+        '${continueVideoAudioInBackground.value}',
+      );
+      _applyBackgroundPolicy();
+    });
   }
 
   // ---------------------------------------------------------------------------
@@ -292,14 +298,16 @@ class PlaybackCoordinator extends BaseAudioHandler with SeekHandler {
     if (saved != null && saved < c.value.duration - kSeekStep) {
       await c.seekTo(saved);
     }
+    // Change detection must start fresh for the new engine; otherwise a
+    // "playing" carried over from the previous item suppresses the broadcast
+    // and the system session stays in "loading" (found on device, 2026-10-26).
+    _lastPlaying = null;
+    _lastBuffering = null;
     c.addListener(_onControllerChanged);
     controller.value = c;
     _log('loaded ${media.kind.name} "${media.title}"');
-    if (autoplay) {
-      await c.play();
-    } else {
-      _broadcast(force: true);
-    }
+    if (autoplay) await c.play();
+    _broadcast(force: true);
   }
 
   Future<void> _disposeController() async {
