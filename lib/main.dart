@@ -10,6 +10,7 @@ import 'core/platform/picture_in_picture.dart';
 import 'features/library/data/media_library_repository.dart';
 import 'features/playback/application/playback_coordinator.dart';
 import 'features/playback/data/drift_progress_store.dart';
+import 'features/playback/data/drift_queue_store.dart';
 import 'features/playback/domain/media_source.dart';
 import 'features/settings/data/preferences_repository.dart';
 import 'shared/data/app_database.dart';
@@ -30,6 +31,7 @@ Future<void> main() async {
   final preferences = PreferencesRepository(db);
   final coordinator = await PlaybackCoordinator.init(
     progressStore: DriftPlaybackProgressStore(db),
+    queueStore: DriftQueueStore(db),
     onLoadError: (media) => library.verifyAvailability(media.id),
     artworkFor: (media) async {
       final path = await const MethodChannelMediaStore().thumbnail(
@@ -66,6 +68,11 @@ Future<void> main() async {
       ),
     ),
   );
+
+  if (!autoload) {
+    // Restored paused at the saved position; never auto-plays (spec 7.1).
+    await coordinator.restoreQueue();
+  }
 
   if (autoload) {
     for (final path in _debugAutoload.split(';')) {

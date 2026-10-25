@@ -8,6 +8,7 @@ import '../../../app/providers.dart';
 import '../../../app/theme/app_theme.dart';
 import '../../library/application/library_providers.dart';
 import '../../playback/domain/play_queue.dart';
+import '../../playlists/application/playlist_providers.dart';
 import 'widgets/queue_sheet.dart';
 import 'widgets/seek_bar.dart';
 import 'widgets/transport_controls.dart';
@@ -32,7 +33,7 @@ class MusicPlayerScreen extends ConsumerWidget {
             actions: [
               IconButton(
                 tooltip: 'Queue',
-                onPressed: () => showQueueSheet(context, coordinator),
+                onPressed: () => showQueueSheet(context),
                 icon: const Icon(Icons.queue_music),
               ),
             ],
@@ -84,6 +85,7 @@ class MusicPlayerScreen extends ConsumerWidget {
                             coordinator: coordinator,
                             showSeekBar: false,
                           ),
+                          _ModeRow(mediaId: media.id),
                         ],
                       );
                     },
@@ -128,6 +130,51 @@ class _Artwork extends ConsumerWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Repeat, favourite and shuffle (spec 6.1). The repeat button cycles
+/// off → all → one and states the mode in its label, not colour alone.
+class _ModeRow extends ConsumerWidget {
+  const _ModeRow({required this.mediaId});
+
+  final String mediaId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final coordinator = ref.watch(coordinatorProvider);
+    final queue = coordinator.playQueue.value;
+    final favorite = ref.watch(isFavoriteProvider(mediaId)).value ?? false;
+    final (icon, label, next) = switch (queue.repeat) {
+      QueueRepeat.off => (Icons.repeat, 'Repeat off', QueueRepeat.all),
+      QueueRepeat.all => (Icons.repeat_on, 'Repeat all', QueueRepeat.one),
+      QueueRepeat.one => (Icons.repeat_one_on, 'Repeat one', QueueRepeat.off),
+    };
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      children: [
+        IconButton(
+          tooltip: '$label. Tap to change.',
+          onPressed: () => coordinator.setRepeat(next),
+          icon: Icon(icon),
+        ),
+        IconButton(
+          tooltip: favorite ? 'Remove from favourites' : 'Add to favourites',
+          isSelected: favorite,
+          onPressed: () =>
+              ref.read(playlistRepositoryProvider).toggleFavorite(mediaId),
+          icon: const Icon(Icons.favorite_border),
+          selectedIcon: const Icon(Icons.favorite),
+        ),
+        IconButton(
+          tooltip: queue.shuffled ? 'Shuffle on' : 'Shuffle off',
+          isSelected: queue.shuffled,
+          onPressed: () => coordinator.setShuffle(!queue.shuffled),
+          icon: const Icon(Icons.shuffle),
+          selectedIcon: const Icon(Icons.shuffle_on),
+        ),
+      ],
     );
   }
 }

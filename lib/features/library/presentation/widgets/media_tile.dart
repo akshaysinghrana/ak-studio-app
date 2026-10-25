@@ -9,9 +9,18 @@ import '../../../player/presentation/widgets/transport_controls.dart';
 import '../../../playback/domain/media_source.dart';
 import '../../application/library_providers.dart';
 import '../../data/media_library_repository.dart';
+import '../../../playlists/application/playlist_providers.dart';
+import '../../../playlists/presentation/playlist_dialogs.dart';
 import '../library_actions.dart';
 
-enum _TileAction { playNext, addToQueue, rescan, remove }
+enum _TileAction {
+  playNext,
+  addToQueue,
+  addToPlaylist,
+  favorite,
+  rescan,
+  remove,
+}
 
 /// One library row: thumbnail, title, real metadata only, resume progress,
 /// and a menu with queue actions. Unavailable items stay listed with a text
@@ -26,6 +35,7 @@ class MediaTile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final item = entry.item;
     final progress = entry.progress;
+    final isFavorite = ref.watch(isFavoriteProvider(item.id)).value ?? false;
     final details = [
       if (item.kind == MediaKind.audio && item.artist != null) item.artist!,
       if (item.durationMs != null)
@@ -45,7 +55,22 @@ class MediaTile extends ConsumerWidget {
       enabled: item.available,
       onTap: item.available ? onTap : null,
       leading: MediaThumbnail(entry: entry),
-      title: Text(item.title, maxLines: 2, overflow: TextOverflow.ellipsis),
+      title: Row(
+        children: [
+          Expanded(
+            child: Text(
+              item.title,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          if (isFavorite)
+            const Padding(
+              padding: EdgeInsets.only(left: AppTokens.spaceXs),
+              child: Icon(Icons.favorite, size: 16, semanticLabel: 'Favourite'),
+            ),
+        ],
+      ),
       subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
@@ -78,6 +103,16 @@ class MediaTile extends ConsumerWidget {
               value: _TileAction.addToQueue,
               child: Text('Add to queue'),
             ),
+            const PopupMenuItem(
+              value: _TileAction.addToPlaylist,
+              child: Text('Add to playlist…'),
+            ),
+            PopupMenuItem(
+              value: _TileAction.favorite,
+              child: Text(
+                isFavorite ? 'Remove from favourites' : 'Add to favourites',
+              ),
+            ),
           ] else
             const PopupMenuItem(
               value: _TileAction.rescan,
@@ -109,6 +144,19 @@ class MediaTile extends ConsumerWidget {
         await coordinator.addToQueue(entry.toMediaSource());
         messenger.showSnackBar(
           SnackBar(content: Text('Added "${entry.item.title}" to the queue')),
+        );
+      case _TileAction.addToPlaylist:
+        await showAddToPlaylist(context, ref, [entry.item.id]);
+      case _TileAction.favorite:
+        final added = await ref
+            .read(playlistRepositoryProvider)
+            .toggleFavorite(entry.item.id);
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              added ? 'Added to favourites' : 'Removed from favourites',
+            ),
+          ),
         );
       case _TileAction.rescan:
         await LibraryActions.scan(context, ref);

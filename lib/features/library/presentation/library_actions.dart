@@ -111,8 +111,9 @@ abstract final class LibraryActions {
       builder: (context) => AlertDialog(
         title: const Text('Remove from library?'),
         content: Text(
-          '"${entry.item.title}" will be removed from the app\'s library and '
-          'its saved position cleared. The file on your device is not deleted.',
+          '"${entry.item.title}" will be removed from the app\'s library, its '
+          'playlists and favourites, and its saved position cleared. The file '
+          'on your device is not deleted.',
         ),
         actions: [
           TextButton(

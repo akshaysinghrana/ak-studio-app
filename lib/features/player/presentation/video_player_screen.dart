@@ -236,7 +236,7 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
           );
         }
       case _MenuAction.queue:
-        await showQueueSheet(context, _coordinator);
+        await showQueueSheet(context);
       case _MenuAction.debug:
         await showModalBottomSheet<void>(
           context: context,

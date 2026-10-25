@@ -5,15 +5,15 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../support/fakes.dart';
 
-/// Schema v1 is exported to drift_schemas/ so future versions get generated
+/// The latest schema is exported to drift_schemas/ so future versions get generated
 /// migration tests (`dart run drift_dev make-migrations`, ADR 0002).
 void main() {
-  test('current schema matches the exported v1 schema', () async {
+  test('current schema matches the latest exported schema', () async {
     final db = memoryDatabase();
     addTearDown(db.close);
-    expect(db.schemaVersion, 1);
-
-    final file = File('drift_schemas/app_database/drift_schema_v1.json');
+    final file = File(
+      'drift_schemas/app_database/drift_schema_v${db.schemaVersion}.json',
+    );
     expect(file.existsSync(), isTrue, reason: 'run drift_dev make-migrations');
     final exported =
         jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;

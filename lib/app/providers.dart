@@ -6,6 +6,7 @@ import '../core/platform/media_store.dart';
 import '../core/platform/picture_in_picture.dart';
 import '../features/library/data/media_library_repository.dart';
 import '../features/playback/application/playback_coordinator.dart';
+import '../features/playlists/data/playlist_repository.dart';
 import '../features/settings/data/preferences_repository.dart';
 import '../shared/data/app_database.dart';
 
@@ -50,4 +51,8 @@ final preferencesProvider = Provider<PreferencesRepository>(
 
 final themeModeProvider = StreamProvider<ThemeMode>(
   (ref) => ref.watch(preferencesProvider).watchThemeMode(),
+);
+
+final playlistRepositoryProvider = Provider<PlaylistRepository>(
+  (ref) => PlaylistRepository(ref.watch(databaseProvider)),
 );
