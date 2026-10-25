@@ -4,6 +4,8 @@ import 'package:drift/drift.dart';
 
 import '../../../shared/data/app_database.dart';
 import '../../library/data/media_library_repository.dart';
+import '../../sync/application/sync_service.dart';
+import '../../sync/domain/media_fingerprint.dart';
 
 class PlaylistSummary {
   const PlaylistSummary(this.playlist, this.count, this.totalDurationMs);
@@ -129,9 +131,27 @@ class PlaylistRepository {
         ),
       );
 
-  /// Deletes the playlist and its entries; media files are untouched.
-  Future<void> delete(String id) =>
-      (_db.delete(_playlists)..where((t) => t.id.equals(id))).go();
+  /// Deletes the playlist and its entries; media files are untouched. A
+  /// playlist attached to an account leaves a tombstone so the deletion syncs.
+  Future<void> delete(String id) => _db.transaction(() async {
+    final row = await (_db.select(
+      _playlists,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    await (_db.delete(_playlists)..where((t) => t.id.equals(id))).go();
+    final owner = row?.userId;
+    if (owner != null) await _tombstone('playlist', id, owner);
+  });
+
+  Future<void> _tombstone(String kind, String recordId, String userId) => _db
+      .into(_db.syncTombstones)
+      .insertOnConflictUpdate(
+        SyncTombstonesCompanion.insert(
+          kind: kind,
+          recordId: recordId,
+          userId: userId,
+          deletedAt: DateTime.now(),
+        ),
+      );
 
   Future<AddResult> addMedia(
     String playlistId,
@@ -244,7 +264,16 @@ class PlaylistRepository {
     final removed = await (_db.delete(
       _db.favorites,
     )..where((t) => t.mediaId.equals(mediaId))).go();
-    if (removed > 0) return false;
+    if (removed > 0) {
+      final syncUser = await _syncUserId();
+      final item = await (_db.select(
+        _items,
+      )..where((t) => t.id.equals(mediaId))).getSingleOrNull();
+      if (syncUser != null && item != null) {
+        await _tombstone('favorite', mediaFingerprint(item), syncUser);
+      }
+      return false;
+    }
     await _db
         .into(_db.favorites)
         .insert(
@@ -274,6 +303,12 @@ class PlaylistRepository {
       ],
     );
   }
+
+  Future<String?> _syncUserId() async =>
+      (await (_db.select(_db.userPreferences)
+                ..where((t) => t.key.equals(SyncService.syncUserKey)))
+              .getSingleOrNull())
+          ?.value;
 
   static String _cleanName(String name) {
     final trimmed = name.trim();

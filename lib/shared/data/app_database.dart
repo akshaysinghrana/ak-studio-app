@@ -138,8 +138,36 @@ class Favorites extends Table {
   Set<Column> get primaryKey => {mediaId};
 }
 
+/// Deletions of synced records, pushed to the account on the next sync so
+/// other devices remove them too (ADR 0003).
+@DataClassName('SyncTombstoneRow')
+class SyncTombstones extends Table {
+  /// 'playlist' or 'favorite'.
+  TextColumn get kind => text()();
+
+  /// Playlist ID, or the media fingerprint for favourites.
+  TextColumn get recordId => text()();
+  TextColumn get userId => text()();
+  DateTimeColumn get deletedAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {kind, recordId, userId};
+}
+
+@DataClassName('SyncMetadataRow')
+class SyncMetadata extends Table {
+  TextColumn get userId => text()();
+  DateTimeColumn get lastSyncAt => dateTime().nullable()();
+  TextColumn get lastError => text().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {userId};
+}
+
 @DriftDatabase(
   tables: [
+    SyncTombstones,
+    SyncMetadata,
     MediaItems,
     PlaybackProgress,
     UserPreferences,
@@ -156,7 +184,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.open() : super(driftDatabase(name: 'unified_media_player'));
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -169,6 +197,10 @@ class AppDatabase extends _$AppDatabase {
         await m.createTable(schema.playlistEntries);
         await m.createIndex(schema.playlistEntriesOrder);
         await m.createTable(schema.favorites);
+      },
+      from2To3: (m, schema) async {
+        await m.createTable(schema.syncTombstones);
+        await m.createTable(schema.syncMetadata);
       },
     ),
     beforeOpen: (details) async {

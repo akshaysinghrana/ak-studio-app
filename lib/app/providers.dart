@@ -4,10 +4,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/permissions/media_permissions.dart';
 import '../core/platform/media_store.dart';
 import '../core/platform/picture_in_picture.dart';
+import '../features/account/data/auth_repository.dart';
 import '../features/library/data/media_library_repository.dart';
 import '../features/playback/application/playback_coordinator.dart';
 import '../features/playlists/data/playlist_repository.dart';
 import '../features/settings/data/preferences_repository.dart';
+import '../features/sync/application/sync_service.dart';
+import '../features/sync/data/remote_store.dart';
 import '../shared/data/app_database.dart';
 
 // Long-lived services are created in `bootstrap` and injected with overrides,
@@ -55,4 +58,23 @@ final themeModeProvider = StreamProvider<ThemeMode>(
 
 final playlistRepositoryProvider = Provider<PlaylistRepository>(
   (ref) => PlaylistRepository(ref.watch(databaseProvider)),
+);
+
+/// Not configured unless bootstrap found real Firebase options.
+final authRepositoryProvider = Provider<AuthRepository>(
+  (ref) => const UnconfiguredAuthRepository(),
+);
+
+/// Null when accounts are not configured for this build.
+final remoteStoreProvider = Provider<RemoteStore?>((ref) => null);
+
+final syncServiceProvider = Provider<SyncService?>((ref) {
+  final remote = ref.watch(remoteStoreProvider);
+  return remote == null
+      ? null
+      : SyncService(ref.watch(databaseProvider), remote);
+});
+
+final authStateProvider = StreamProvider<AppUser?>(
+  (ref) => ref.watch(authRepositoryProvider).authStateChanges(),
 );

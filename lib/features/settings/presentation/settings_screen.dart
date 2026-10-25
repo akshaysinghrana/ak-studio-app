@@ -49,6 +49,26 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       appBar: AppBar(title: const Text('Settings')),
       body: ListView(
         children: [
+          const _Header('Account'),
+          Consumer(
+            builder: (context, ref, _) {
+              final auth = ref.watch(authRepositoryProvider);
+              final user = ref.watch(authStateProvider).value;
+              return ListTile(
+                leading: const Icon(Icons.account_circle_outlined),
+                title: Text(user?.email ?? 'Guest'),
+                subtitle: Text(
+                  !auth.isConfigured
+                      ? 'Accounts are not set up in this build'
+                      : user == null
+                      ? 'Sign in to sync playlists, favourites and settings'
+                      : 'Account and sync',
+                ),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => context.push(Routes.account),
+              );
+            },
+          ),
           const _Header('Playback'),
           BackgroundAudioSwitch(coordinator: coordinator),
           const ListTile(
@@ -106,8 +126,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           const ListTile(
             title: Text('Privacy'),
             subtitle: Text(
-              'Your media files and library stay on this device. No analytics '
-              'are collected.',
+              'Your media files and library stay on this device. If you sign '
+              'in, only playlists, favourites and settings sync, using '
+              'anonymous file fingerprints. No analytics are collected.',
             ),
           ),
           if (kDebugMode) ...[

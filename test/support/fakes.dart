@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:drift/native.dart';
+import 'package:video_music_app/features/account/data/auth_repository.dart';
 import 'package:video_music_app/core/permissions/media_permissions.dart';
 import 'package:video_music_app/core/platform/media_store.dart';
 import 'package:video_music_app/features/library/domain/media_record.dart';
@@ -104,5 +107,57 @@ class FakeMediaPermissions implements MediaPermissions {
   Future<bool> openSettings() async {
     settingsOpened++;
     return true;
+  }
+}
+
+class FakeAuthRepository implements AuthRepository {
+  FakeAuthRepository({this.password = 'secret1'});
+
+  final String password;
+  final _users = StreamController<AppUser?>.broadcast();
+  AppUser? _current;
+
+  @override
+  bool get isConfigured => true;
+
+  @override
+  Stream<AppUser?> authStateChanges() async* {
+    yield _current;
+    yield* _users.stream;
+  }
+
+  @override
+  AppUser? get currentUser => _current;
+
+  @override
+  Future<AppUser> signIn(String email, String password) async {
+    if (password != this.password) {
+      throw const AuthFailure('Email or password is incorrect.');
+    }
+    _current = AppUser(uid: 'uid-1', email: email);
+    _users.add(_current);
+    return _current!;
+  }
+
+  @override
+  Future<AppUser> register(String email, String password) =>
+      signIn(email, password);
+
+  @override
+  Future<void> sendPasswordReset(String email) async {}
+
+  @override
+  Future<void> signOut() async {
+    _current = null;
+    _users.add(null);
+  }
+
+  @override
+  Future<void> deleteAccount(
+    String password, {
+    Future<void> Function()? beforeDelete,
+  }) async {
+    await beforeDelete?.call();
+    await signOut();
   }
 }

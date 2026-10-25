@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../features/account/presentation/account_screen.dart';
 import '../features/library/presentation/home_screen.dart';
 import '../features/library/presentation/media_list_screen.dart';
 import '../features/player/presentation/player_screen.dart';
@@ -16,6 +17,7 @@ abstract final class Routes {
   static const videos = '/videos';
   static const music = '/music';
   static const settings = '/settings';
+  static const account = '/settings/account';
   static const playlists = '/playlists';
   static const favorites = '/playlists/favorites';
   static String playlist(String id) => '/playlists/list/$id';
@@ -83,6 +85,12 @@ GoRouter buildRouter({String initialLocation = Routes.home}) => GoRouter(
             GoRoute(
               path: Routes.settings,
               builder: (context, state) => const SettingsScreen(),
+              routes: [
+                GoRoute(
+                  path: 'account',
+                  builder: (context, state) => const AccountScreen(),
+                ),
+              ],
             ),
           ],
         ),

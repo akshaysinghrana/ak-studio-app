@@ -1,4 +1,9 @@
+import 'dart:async';
+
 import 'package:audio_service/audio_service.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,6 +12,7 @@ import 'app/app.dart';
 import 'app/providers.dart';
 import 'app/router.dart';
 import 'core/platform/media_store.dart';
+import 'features/account/data/auth_repository.dart';
 import 'core/platform/picture_in_picture.dart';
 import 'features/library/data/media_library_repository.dart';
 import 'features/playback/application/playback_coordinator.dart';
@@ -14,6 +20,9 @@ import 'features/playback/data/drift_progress_store.dart';
 import 'features/playback/data/drift_queue_store.dart';
 import 'features/playback/domain/media_source.dart';
 import 'features/settings/data/preferences_repository.dart';
+import 'features/sync/application/sync_service.dart';
+import 'features/sync/data/remote_store.dart';
+import 'firebase_options.dart';
 import 'shared/data/app_database.dart';
 
 /// Debug-only: `--dart-define=UMP_DEBUG_AUTOLOAD=/path/a.mp4;/path/b.mp3`
@@ -24,6 +33,21 @@ const _debugAutoload = String.fromEnvironment('UMP_DEBUG_AUTOLOAD');
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final db = AppDatabase.open();
+
+  // Accounts only when this build has a real Firebase project (ADR 0003);
+  // otherwise guest mode, and the UI says accounts are not set up.
+  AuthRepository auth = const UnconfiguredAuthRepository();
+  RemoteStore? remote;
+  final firebaseOptions = DefaultFirebaseOptions.currentPlatform;
+  if (firebaseOptions != null) {
+    try {
+      await Firebase.initializeApp(options: firebaseOptions);
+      auth = FirebaseAuthRepository(FirebaseAuth.instance);
+      remote = FirestoreRemoteStore(FirebaseFirestore.instance);
+    } catch (e) {
+      debugPrint('Firebase unavailable, continuing as guest: $e');
+    }
+  }
   final library = MediaLibraryRepository(
     db,
     const MethodChannelMediaStore(),
@@ -74,6 +98,8 @@ Future<void> main() async {
         pictureInPictureProvider.overrideWithValue(PictureInPicture()),
         libraryRepositoryProvider.overrideWithValue(library),
         preferencesProvider.overrideWithValue(preferences),
+        authRepositoryProvider.overrideWithValue(auth),
+        remoteStoreProvider.overrideWithValue(remote),
       ],
       child: MediaPlayerApp(router: router),
     ),
@@ -82,6 +108,16 @@ Future<void> main() async {
   if (!autoload) {
     // Restored paused at the saved position; never auto-plays (spec 7.1).
     await coordinator.restoreQueue();
+  }
+
+  // Background sync on start for a signed-in user with sync on; failures are
+  // recorded and never block playback.
+  final user = auth.currentUser;
+  if (user != null && remote != null) {
+    final sync = SyncService(db, remote);
+    if (await sync.syncUserId() == user.uid) {
+      unawaited(sync.sync(user.uid).then((_) {}, onError: (_) {}));
+    }
   }
 
   if (autoload) {
