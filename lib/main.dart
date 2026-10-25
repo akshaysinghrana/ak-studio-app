@@ -1,3 +1,4 @@
+import 'package:audio_service/audio_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -52,6 +53,19 @@ Future<void> main() async {
   );
 
   final autoload = kDebugMode && _debugAutoload.isNotEmpty;
+  final router = buildRouter(
+    initialLocation: autoload ? Routes.debugEngine : Routes.home,
+  );
+  // Tapping the media notification opens Now Playing (spec 6.1).
+  AudioService.notificationClicked.listen((clicked) {
+    final path = router.routerDelegate.currentConfiguration.uri.path;
+    if (clicked &&
+        !coordinator.playQueue.value.isEmpty &&
+        path != Routes.player &&
+        path != Routes.debugEngine) {
+      router.push(Routes.player);
+    }
+  });
   runApp(
     ProviderScope(
       overrides: [
@@ -61,11 +75,7 @@ Future<void> main() async {
         libraryRepositoryProvider.overrideWithValue(library),
         preferencesProvider.overrideWithValue(preferences),
       ],
-      child: MediaPlayerApp(
-        router: buildRouter(
-          initialLocation: autoload ? Routes.debugEngine : Routes.home,
-        ),
-      ),
+      child: MediaPlayerApp(router: router),
     ),
   );
 

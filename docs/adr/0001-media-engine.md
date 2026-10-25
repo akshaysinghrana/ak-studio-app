@@ -77,3 +77,10 @@ Full results: `docs/testing/phase1-device-results.md`. The device was a Motorola
 | Zoom on the real texture | PASS: pinch, 1×–4× clamps, pan bounds, reset, double-tap (on-device `zoom_test`) |
 | `flutter analyze`, unit tests, debug/release builds | PASS |
 | Physical iPhone | **Not run.** The iOS platform has not been created yet |
+
+## Phase 5 additions (2026-10-26)
+
+- **Queue restore:** after a process restart the queue is restored from the database, paused at the saved position. It never auto-plays (spec 7.1, 12). `play()` from a headset or the notification on a restored but not-yet-loaded queue loads and plays the current item.
+- **Repeat and shuffle** are exposed to the system media session (`setRepeatMode` / `setShuffleMode`) and broadcast in `PlaybackState`.
+- **Notification metadata:** artist and album come from tags only, and artwork from MediaStore thumbnails. Tapping the notification opens Now Playing.
+- **Single engine:** there is still one audible engine and no handoff code path, so the spec 8.3 handoff requirements do not apply.
