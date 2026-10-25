@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.os.Build
 import android.util.Rational
+import android.view.WindowManager
 import com.ryanheise.audioservice.AudioServiceActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -15,6 +16,7 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : AudioServiceActivity() {
     companion object {
         private const val PIP_CHANNEL = "com.akshayrana.video_music_app/pip"
+        private const val SCREEN_CHANNEL = "com.akshayrana.video_music_app/screen"
 
         // Android rejects PiP aspect ratios outside 1:2.39 .. 2.39:1.
         private const val MAX_PIP_RATIO = 2.39f
@@ -32,6 +34,34 @@ class MainActivity : AudioServiceActivity() {
             .setMethodCallHandler(MediaStoreScanner(applicationContext))
         documentImporter = DocumentImporter(this).also {
             MethodChannel(messenger, DocumentImporter.CHANNEL).setMethodCallHandler(it)
+        }
+        MethodChannel(messenger, SCREEN_CHANNEL).setMethodCallHandler { call, result ->
+            when (call.method) {
+                // Keeps the display on while video plays; cleared otherwise.
+                "keepOn" -> {
+                    if (call.arguments == true) {
+                        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                    } else {
+                        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                    }
+                    result.success(null)
+                }
+                // App-window brightness only (0..1); null restores the system
+                // value. No WRITE_SETTINGS permission is needed (spec 5.4).
+                "setBrightness" -> {
+                    val value = (call.arguments as? Number)?.toFloat()
+                    window.attributes = window.attributes.apply {
+                        screenBrightness = value?.coerceIn(0.01f, 1f)
+                            ?: WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+                    }
+                    result.success(null)
+                }
+                "getBrightness" -> {
+                    val current = window.attributes.screenBrightness
+                    result.success(if (current < 0) null else current.toDouble())
+                }
+                else -> result.notImplemented()
+            }
         }
         pipChannel = MethodChannel(messenger, PIP_CHANNEL).apply {
             setMethodCallHandler { call, result ->

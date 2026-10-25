@@ -23,13 +23,14 @@ import 'playback_progress_store.dart';
 /// UI, notification, lock screen and headset buttons all call the
 /// [BaseAudioHandler] overrides below.
 class PlaybackCoordinator extends BaseAudioHandler with SeekHandler {
-  PlaybackCoordinator._(this._progressStore, this._onLoadError);
+  PlaybackCoordinator._(this._progressStore, this._onLoadError, this._artwork);
 
   /// [onLoadError] lets the library re-check a file that failed to open
   /// (missing, revoked grant or corrupt).
   static Future<PlaybackCoordinator> init({
     PlaybackProgressStore? progressStore,
     void Function(MediaSource media)? onLoadError,
+    Future<Uri?> Function(MediaSource media)? artworkFor,
   }) async {
     final session = await AudioSession.instance;
     await session.configure(const AudioSessionConfiguration.music());
@@ -37,6 +38,7 @@ class PlaybackCoordinator extends BaseAudioHandler with SeekHandler {
       builder: () => PlaybackCoordinator._(
         progressStore ?? InMemoryPlaybackProgressStore(),
         onLoadError,
+        artworkFor,
       ),
       config: const AudioServiceConfig(
         androidNotificationChannelId: 'com.akshayrana.video_music_app.playback',
@@ -70,6 +72,10 @@ class PlaybackCoordinator extends BaseAudioHandler with SeekHandler {
 
   final PlaybackProgressStore _progressStore;
   final void Function(MediaSource media)? _onLoadError;
+
+  /// Cover art / thumbnail for the system media session, if any.
+  final Future<Uri?> Function(MediaSource media)? _artwork;
+  final Map<String, Uri?> _artworkCache = {};
   Timer? _progressTimer;
 
   late final AppLifecycleListener _lifecycle;
@@ -305,6 +311,7 @@ class PlaybackCoordinator extends BaseAudioHandler with SeekHandler {
 
     _completionHandled = false;
     mediaItem.add(_toMediaItem(entry, duration: c.value.duration));
+    unawaited(_loadArtwork(entry, generation, c.value.duration));
     final saved = await _progressStore.resumePosition(media.id);
     if (generation != _loadGeneration) {
       await c.dispose();
@@ -457,15 +464,39 @@ class PlaybackCoordinator extends BaseAudioHandler with SeekHandler {
   QueueEntry _newEntry(MediaSource media) =>
       QueueEntry(entryId: 'q${_entryCounter++}', media: media);
 
-  MediaItem _toMediaItem(QueueEntry entry, {Duration? duration}) => MediaItem(
-    id: entry.entryId,
-    title: entry.media.title,
-    // Never fabricate artist/album metadata (spec 6.1).
-    album: null,
-    artist: null,
-    duration: duration,
-    extras: {'kind': entry.media.kind.name},
-  );
+  Future<void> _loadArtwork(
+    QueueEntry entry,
+    int generation,
+    Duration duration,
+  ) async {
+    final loader = _artwork;
+    if (loader == null) return;
+    final id = entry.media.id;
+    final Uri? uri;
+    if (_artworkCache.containsKey(id)) {
+      uri = _artworkCache[id];
+    } else {
+      try {
+        uri = _artworkCache[id] = await loader(entry.media);
+      } on Exception {
+        return;
+      }
+    }
+    if (uri == null || generation != _loadGeneration) return;
+    mediaItem.add(_toMediaItem(entry, duration: duration, artUri: uri));
+  }
+
+  MediaItem _toMediaItem(QueueEntry entry, {Duration? duration, Uri? artUri}) =>
+      MediaItem(
+        id: entry.entryId,
+        title: entry.media.title,
+        // Tag metadata only; never fabricated (spec 6.1).
+        album: entry.media.album,
+        artist: entry.media.artist,
+        duration: duration,
+        artUri: artUri,
+        extras: {'kind': entry.media.kind.name, 'mediaId': entry.media.id},
+      );
 
   void _log(String event) {
     if (!kDebugMode) return;

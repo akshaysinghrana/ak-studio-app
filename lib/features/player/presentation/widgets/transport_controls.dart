@@ -31,9 +31,16 @@ class PlaybackErrorBanner extends StatelessWidget {
 }
 
 class TransportControls extends StatelessWidget {
-  const TransportControls({super.key, required this.coordinator});
+  const TransportControls({
+    super.key,
+    required this.coordinator,
+    this.showSeekBar = true,
+  });
 
   final PlaybackCoordinator coordinator;
+
+  /// False when the screen shows its own [SeekBar].
+  final bool showSeekBar;
 
   void _seekFeedback(BuildContext context, String label) {
     ScaffoldMessenger.of(context)
@@ -64,26 +71,28 @@ class TransportControls extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Column(
                 children: [
-                  Slider(
-                    value: maxMs <= 0
-                        ? 0
-                        : position.inMilliseconds.toDouble().clamp(0, maxMs),
-                    max: maxMs <= 0 ? 1 : maxMs,
-                    onChanged: maxMs <= 0
-                        ? null
-                        : (ms) => coordinator.seek(
-                            Duration(milliseconds: ms.round()),
-                          ),
-                    semanticFormatterCallback: (_) =>
-                        '${formatDuration(position)} of ${formatDuration(duration)}',
-                  ),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(formatDuration(position)),
-                      Text(formatDuration(duration)),
-                    ],
-                  ),
+                  if (showSeekBar) ...[
+                    Slider(
+                      value: maxMs <= 0
+                          ? 0
+                          : position.inMilliseconds.toDouble().clamp(0, maxMs),
+                      max: maxMs <= 0 ? 1 : maxMs,
+                      onChanged: maxMs <= 0
+                          ? null
+                          : (ms) => coordinator.seek(
+                              Duration(milliseconds: ms.round()),
+                            ),
+                      semanticFormatterCallback: (_) =>
+                          '${formatDuration(position)} of ${formatDuration(duration)}',
+                    ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(formatDuration(position)),
+                        Text(formatDuration(duration)),
+                      ],
+                    ),
+                  ],
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [

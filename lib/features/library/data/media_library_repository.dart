@@ -21,6 +21,8 @@ class LibraryEntry {
     title: item.title,
     locator: item.locator,
     kind: item.kind,
+    artist: item.artist,
+    album: item.album,
   );
 }
 

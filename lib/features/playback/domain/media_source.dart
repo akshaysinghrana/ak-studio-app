@@ -8,12 +8,18 @@ class MediaSource {
     required this.title,
     required this.locator,
     required this.kind,
+    this.artist,
+    this.album,
   });
 
   final String id;
   final String title;
   final String locator;
   final MediaKind kind;
+
+  /// Tag metadata when present; never invented (spec 6.1).
+  final String? artist;
+  final String? album;
 
   /// Builds a source for a supported local file, or null for other types.
   /// Phase 1 uses the path as the ID; Phase 2 replaces it with a stable app ID.

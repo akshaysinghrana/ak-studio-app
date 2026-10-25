@@ -31,6 +31,13 @@ Future<void> main() async {
   final coordinator = await PlaybackCoordinator.init(
     progressStore: DriftPlaybackProgressStore(db),
     onLoadError: (media) => library.verifyAvailability(media.id),
+    artworkFor: (media) async {
+      final path = await const MethodChannelMediaStore().thumbnail(
+        media.locator,
+        size: 512,
+      );
+      return path == null ? null : Uri.file(path);
+    },
   );
 
   // Spec 8.1: the background-audio setting is persisted and restored.

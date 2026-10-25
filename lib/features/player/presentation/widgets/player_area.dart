@@ -1,16 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:gal/gal.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:video_player/video_player.dart';
 
-import '../../../../core/platform/frame_capture.dart';
 import '../../../../core/platform/picture_in_picture.dart';
 import '../../../playback/application/playback_coordinator.dart';
 import '../../../playback/domain/media_source.dart';
 import '../../../playback/domain/play_queue.dart';
-
-const screenshotAlbum = 'Media Player Screenshots';
+import '../../application/frame_capture_action.dart';
 
 class PlayerArea extends StatelessWidget {
   const PlayerArea({super.key, required this.coordinator, required this.pip});
@@ -141,47 +136,13 @@ class _ZoomableVideoState extends State<ZoomableVideo> {
   }
 
   Future<void> _captureFrame() async {
-    final messenger = ScaffoldMessenger.of(context);
     setState(() => _capturing = true);
-    try {
-      final path = await const FrameCapture().capture(
-        locator: widget.locator,
-        position: widget.controller.value.position,
-      );
-      var saved =
-          await Gal.hasAccess(toAlbum: true) ||
-          await Gal.requestAccess(toAlbum: true);
-      if (saved) {
-        try {
-          await Gal.putImage(path, album: screenshotAlbum);
-        } on GalException catch (e) {
-          saved = false;
-          messenger.showSnackBar(
-            SnackBar(content: Text('Could not save: ${e.type.message}')),
-          );
-        }
-      }
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-            saved
-                ? 'Frame saved to "$screenshotAlbum"'
-                : 'Gallery access denied. You can still share the frame.',
-          ),
-          action: SnackBarAction(
-            label: 'Share',
-            onPressed: () =>
-                SharePlus.instance.share(ShareParams(files: [XFile(path)])),
-          ),
-        ),
-      );
-    } on PlatformException catch (e) {
-      messenger.showSnackBar(
-        SnackBar(content: Text('Frame capture failed: ${e.message}')),
-      );
-    } finally {
-      if (mounted) setState(() => _capturing = false);
-    }
+    await captureAndSaveFrame(
+      context,
+      locator: widget.locator,
+      position: widget.controller.value.position,
+    );
+    if (mounted) setState(() => _capturing = false);
   }
 
   @override
