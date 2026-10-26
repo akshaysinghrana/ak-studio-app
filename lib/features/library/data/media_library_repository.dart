@@ -26,6 +26,37 @@ class LibraryEntry {
   );
 }
 
+/// A folder of indexed media (MediaStore relative path, or null for files
+/// imported through the picker).
+class FolderSummary {
+  const FolderSummary({
+    required this.folder,
+    required this.count,
+    required this.totalBytes,
+    required this.hidden,
+    this.sampleLocator,
+  });
+
+  final String? folder;
+  final int count;
+  final int totalBytes;
+  final bool hidden;
+
+  /// Any item in the folder, for a thumbnail.
+  final String? sampleLocator;
+
+  /// Last path segment, e.g. `Camera` for `DCIM/Camera/`.
+  String get name {
+    final f = folder;
+    if (f == null || f.isEmpty) return 'Other files';
+    final parts = f.split('/').where((p) => p.isNotEmpty).toList();
+    return parts.isEmpty ? f : parts.last;
+  }
+
+  /// Full relative path, shown under the name.
+  String get path => folder ?? 'Imported with Choose files';
+}
+
 class ScanSummary {
   const ScanSummary({
     required this.added,
@@ -69,16 +100,30 @@ class MediaLibraryRepository {
 
   $MediaItemsTable get _items => _db.mediaItems;
   $PlaybackProgressTable get _progress => _db.playbackProgress;
+  $HiddenFoldersTable get _hidden => _db.hiddenFolders;
+
+  /// [watch] folder filter for imported files, which have no folder.
+  static const noFolder = '';
 
   // ---------------------------------------------------------------------------
   // Queries
 
+  /// Items of [kind]. Items in hidden folders are excluded unless a
+  /// [folder] is given explicitly. [folder] filters to one folder; use
+  /// [noFolder] for imported files that have none.
   Stream<List<LibraryEntry>> watch(
     MediaKind kind, {
     LibrarySort sort = LibrarySort.title,
     String search = '',
+    String? folder,
   }) {
-    final query = _joined()..where(_items.kind.equalsValue(kind));
+    final query = (folder == null ? _visible() : _joined())
+      ..where(_items.kind.equalsValue(kind));
+    if (folder == noFolder) {
+      query.where(_items.folder.isNull());
+    } else if (folder != null) {
+      query.where(_items.folder.equals(folder));
+    }
     final term = search.trim();
     if (term.isNotEmpty) {
       final pattern = '%${_escapeLike(term.toLowerCase())}%';
@@ -93,7 +138,7 @@ class MediaLibraryRepository {
 
   /// Items with saved, unfinished progress, most recent first (spec 3).
   Stream<List<LibraryEntry>> watchContinue({int limit = 10}) {
-    final query = _joined()
+    final query = _visible()
       ..where(
         _progress.completed.equals(false) &
             _progress.positionMs.isBiggerThanValue(0) &
@@ -105,12 +150,64 @@ class MediaLibraryRepository {
   }
 
   Stream<List<LibraryEntry>> watchRecentlyAdded({int limit = 20}) {
-    final query = _joined()
+    final query = _visible()
       ..where(_items.available.equals(true))
       ..orderBy([OrderingTerm.desc(_items.addedAt)])
       ..limit(limit);
     return query.watch().map(_entries);
   }
+
+  /// Folders containing [kind], with counts and whether they are hidden.
+  Stream<List<FolderSummary>> watchFolders(MediaKind kind) {
+    final count = _items.id.count();
+    final bytes = _items.sizeBytes.sum();
+    final sample = _items.locator.max();
+    final query =
+        _db.selectOnly(_items).join([
+            leftOuterJoin(_hidden, _hidden.folder.equalsExp(_items.folder)),
+          ])
+          ..addColumns([_items.folder, _hidden.folder, count, bytes, sample])
+          ..where(_items.kind.equalsValue(kind))
+          ..groupBy([_items.folder])
+          ..orderBy([OrderingTerm.asc(_items.folder.collate(Collate.noCase))]);
+    return query.watch().map(
+      (rows) => [
+        for (final r in rows)
+          FolderSummary(
+            folder: r.read(_items.folder),
+            count: r.read(count) ?? 0,
+            totalBytes: r.read(bytes) ?? 0,
+            hidden: r.read(_hidden.folder) != null,
+            sampleLocator: r.read(sample),
+          ),
+      ],
+    );
+  }
+
+  Stream<List<String>> watchHiddenFolders() =>
+      (_db.select(_hidden)..orderBy([(t) => OrderingTerm.asc(t.folder)]))
+          .watch()
+          .map((rows) => [for (final r in rows) r.folder]);
+
+  Future<void> hideFolder(String folder) => _db
+      .into(_hidden)
+      .insertOnConflictUpdate(
+        HiddenFoldersCompanion.insert(folder: folder, hiddenAt: DateTime.now()),
+      );
+
+  Future<void> showFolder(String folder) =>
+      (_db.delete(_hidden)..where((t) => t.folder.equals(folder))).go();
+
+  // ---------------------------------------------------------------------------
+  // Watch history
+
+  /// Clears all watch/listen history: resume positions, "Continue" and
+  /// last-played. Library, playlists and favourites are kept.
+  Future<void> clearHistory() => _db.delete(_progress).go();
+
+  /// Removes one item from history (and its resume position).
+  Future<void> removeFromHistory(String mediaId) =>
+      (_db.delete(_progress)..where((t) => t.mediaId.equals(mediaId))).go();
 
   Stream<int> watchCount() {
     final count = _items.id.count();
@@ -302,6 +399,14 @@ class MediaLibraryRepository {
       return (added: added, updated: updated, restored: restored);
     });
   }
+
+  /// Like [_joined] but without items in hidden folders. A join (not a
+  /// subquery) so live queries also refresh when folders are hidden/shown.
+  JoinedSelectStatement<HasResultSet, dynamic> _visible() =>
+      _db.select(_items).join([
+        leftOuterJoin(_progress, _progress.mediaId.equalsExp(_items.id)),
+        leftOuterJoin(_hidden, _hidden.folder.equalsExp(_items.folder)),
+      ])..where(_hidden.folder.isNull());
 
   JoinedSelectStatement<HasResultSet, dynamic> _joined() => _db
       .select(_items)

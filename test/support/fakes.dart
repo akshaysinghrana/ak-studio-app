@@ -18,6 +18,7 @@ MediaRecord record(
   int sizeBytes = 1000,
   String? artist,
   DateTime? addedAt,
+  String? folder,
 }) => MediaRecord(
   uri:
       'content://media/external/${kind == MediaKind.video ? 'video' : 'audio'}/media/$id',
@@ -29,6 +30,7 @@ MediaRecord record(
   durationMs: durationMs,
   sizeBytes: sizeBytes,
   artist: artist,
+  folder: folder,
   addedAt: addedAt ?? DateTime.utc(2026, 1, 1).add(Duration(minutes: id)),
 );
 

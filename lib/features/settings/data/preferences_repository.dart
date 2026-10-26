@@ -72,4 +72,18 @@ class PreferencesRepository {
 
   Future<void> setSubtitleSize(SubtitleSize size) =>
       _set(subtitleSizeKey, size.name, syncEligible: true);
+
+  /// Library view per tab: folders or all items (device-only).
+  Stream<bool> watchFolderView(String tab) =>
+      _watch('library.$tab.folderView').map((v) => v != 'false');
+
+  Future<void> setFolderView(String tab, bool folders) =>
+      _set('library.$tab.folderView', '$folders', syncEligible: false);
+
+  /// Video list layout: grid (default) or list.
+  Stream<bool> watchGridLayout() =>
+      _watch('library.gridLayout').map((v) => v != 'false');
+
+  Future<void> setGridLayout(bool grid) =>
+      _set('library.gridLayout', '$grid', syncEligible: false);
 }

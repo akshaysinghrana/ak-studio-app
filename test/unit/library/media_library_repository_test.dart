@@ -227,4 +227,101 @@ void main() {
     final cont = await repo.watchContinue().first;
     expect(cont.single.item.id, ids[0]);
   });
+
+  group('folders', () {
+    setUp(() async {
+      store.videos = [
+        record(1, folder: 'DCIM/Camera/', sizeBytes: 100),
+        record(2, folder: 'DCIM/Camera/', sizeBytes: 50),
+        record(3, folder: 'Movies/Trips/'),
+      ];
+      await repo.scanMediaStore({MediaKind.video});
+    });
+
+    test('groups items by folder with counts, sizes and names', () async {
+      final folders = await repo.watchFolders(MediaKind.video).first;
+      expect([for (final f in folders) f.name], ['Camera', 'Trips']);
+      expect(folders.first.count, 2);
+      expect(folders.first.totalBytes, 150);
+      expect(folders.first.path, 'DCIM/Camera/');
+      expect(folders.first.sampleLocator, isNotNull);
+      expect(folders.any((f) => f.hidden), isFalse);
+    });
+
+    test('hidden folders vanish from lists, continue and recent', () async {
+      final camera = [
+        for (final e in await all(MediaKind.video))
+          if (e.item.folder == 'DCIM/Camera/') e.item.id,
+      ];
+      await DriftPlaybackProgressStore(db)
+          .save(camera.first, const Duration(seconds: 9), completed: false);
+      expect(await repo.watchContinue().first, hasLength(1));
+
+      // Live query updates when a folder is hidden.
+      final updates = repo.watch(MediaKind.video).map((l) => l.length);
+      final seen = <int>[];
+      final sub = updates.listen(seen.add);
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      await repo.hideFolder('DCIM/Camera/');
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      await sub.cancel();
+      expect(seen.first, 3);
+      expect(seen.last, 1);
+
+      expect(await repo.watchContinue().first, isEmpty);
+      expect(
+        (await repo.watchRecentlyAdded().first).map((e) => e.item.folder),
+        ['Movies/Trips/'],
+      );
+      expect(
+        (await repo.watchFolders(MediaKind.video).first).first.hidden,
+        isTrue,
+      );
+      // Still reachable explicitly (e.g. from Hidden folders).
+      expect(
+        await repo.watch(MediaKind.video, folder: 'DCIM/Camera/').first,
+        hasLength(2),
+      );
+      expect(await repo.watchHiddenFolders().first, ['DCIM/Camera/']);
+
+      await repo.showFolder('DCIM/Camera/');
+      expect(await all(MediaKind.video), hasLength(3));
+    });
+
+    test('imported files without a folder are listed under noFolder', () async {
+      const uri = 'content://docs/document/5';
+      store.documents[uri] = record(5).copyWithUri(uri);
+      importer.nextPick = [uri];
+      await repo.importDocuments();
+      final folders = await repo.watchFolders(MediaKind.video).first;
+      expect(folders.first.folder, isNull);
+      expect(folders.first.name, 'Other files');
+      expect(
+        await repo
+            .watch(MediaKind.video, folder: MediaLibraryRepository.noFolder)
+            .first,
+        hasLength(1),
+      );
+    });
+  });
+
+  test('clear history removes progress but keeps the library', () async {
+    store.videos = [record(1), record(2)];
+    await repo.scanMediaStore({MediaKind.video});
+    final ids = [for (final e in await all(MediaKind.video)) e.item.id];
+    final progress = DriftPlaybackProgressStore(db);
+    await progress.save(ids[0], const Duration(seconds: 5), completed: false);
+    await progress.save(ids[1], const Duration(seconds: 5), completed: false);
+
+    await repo.removeFromHistory(ids[0]);
+    expect(
+      [for (final e in await repo.watchContinue().first) e.item.id],
+      [ids[1]],
+    );
+    expect(await progress.resumePosition(ids[0]), isNull);
+
+    await repo.clearHistory();
+    expect(await repo.watchContinue().first, isEmpty);
+    expect(await all(MediaKind.video), hasLength(2));
+  });
 }

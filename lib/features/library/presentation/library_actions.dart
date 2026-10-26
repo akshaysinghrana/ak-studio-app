@@ -131,4 +131,37 @@ abstract final class LibraryActions {
       await ref.read(libraryRepositoryProvider).remove(entry.item.id);
     }
   }
+
+  /// Clears all watch/listen history after confirmation.
+  static Future<void> confirmClearHistory(
+    BuildContext context,
+    WidgetRef ref,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Clear watch history?'),
+        content: const Text(
+          'Removes "Continue" items, resume positions and last-played '
+          'information. Your library, playlists and favourites are kept.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Clear'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    await ref.read(libraryRepositoryProvider).clearHistory();
+    messenger.showSnackBar(
+      const SnackBar(content: Text('Watch history cleared')),
+    );
+  }
 }

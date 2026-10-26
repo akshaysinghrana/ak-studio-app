@@ -8,7 +8,8 @@ import 'library_actions.dart';
 import 'widgets/library_empty_state.dart';
 import 'widgets/media_tile.dart';
 
-/// Home: continue watching/listening and recently added (spec 3).
+/// Home: continue watching/listening and recently added as card carousels
+/// (spec 3). History can be cleared here or per item.
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
 
@@ -16,6 +17,8 @@ class HomeScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final count = ref.watch(libraryCountProvider).value;
     final scanBusy = ref.watch(scanControllerProvider).busy;
+    final continueItems = ref.watch(continueProvider).value ?? const [];
+    final recent = ref.watch(recentlyAddedProvider).value ?? const [];
     return Scaffold(
       appBar: AppBar(
         title: const Text('Library'),
@@ -41,19 +44,39 @@ class HomeScreen extends ConsumerWidget {
             child: switch (count) {
               null => const Center(child: CircularProgressIndicator()),
               0 => const LibraryEmptyState(message: 'Your library is empty'),
-              _ => ListView(
-                children: [
-                  _Section(
-                    title: 'Continue',
-                    entries: ref.watch(continueProvider).value ?? const [],
-                    emptyText: 'Nothing in progress.',
-                  ),
-                  _Section(
-                    title: 'Recently added',
-                    entries: ref.watch(recentlyAddedProvider).value ?? const [],
-                    emptyText: 'No recently added media.',
-                  ),
-                ],
+              _ => RefreshIndicator(
+                onRefresh: () => LibraryActions.scan(context, ref),
+                child: ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.only(bottom: AppTokens.spaceL),
+                  children: [
+                    _Carousel(
+                      title: 'Continue',
+                      entries: continueItems,
+                      emptyText: 'Nothing in progress.',
+                      inHistory: true,
+                      action: continueItems.isEmpty
+                          ? null
+                          : TextButton.icon(
+                              onPressed: () =>
+                                  LibraryActions.confirmClearHistory(
+                                    context,
+                                    ref,
+                                  ),
+                              icon: const Icon(
+                                Icons.history_toggle_off,
+                                size: 18,
+                              ),
+                              label: const Text('Clear'),
+                            ),
+                    ),
+                    _Carousel(
+                      title: 'Recently added',
+                      entries: recent,
+                      emptyText: 'No recently added media.',
+                    ),
+                  ],
+                ),
               ),
             },
           ),
@@ -63,19 +86,26 @@ class HomeScreen extends ConsumerWidget {
   }
 }
 
-class _Section extends ConsumerWidget {
-  const _Section({
+class _Carousel extends ConsumerWidget {
+  const _Carousel({
     required this.title,
     required this.entries,
     required this.emptyText,
+    this.inHistory = false,
+    this.action,
   });
 
   final String title;
   final List<LibraryEntry> entries;
   final String emptyText;
+  final bool inHistory;
+  final Widget? action;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final textScale = MediaQuery.textScalerOf(context).scale(1);
+    const cardWidth = 220.0;
+    final height = cardWidth * 9 / 16 + 28 * textScale * 2 + 16;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -83,26 +113,55 @@ class _Section extends ConsumerWidget {
           padding: const EdgeInsets.fromLTRB(
             AppTokens.spaceM,
             AppTokens.spaceM,
-            AppTokens.spaceM,
-            AppTokens.spaceXs,
+            AppTokens.spaceS,
+            AppTokens.spaceS,
           ),
-          child: Semantics(
-            header: true,
-            child: Text(title, style: Theme.of(context).textTheme.titleMedium),
+          child: Row(
+            children: [
+              Expanded(
+                child: Semantics(
+                  header: true,
+                  child: Text(
+                    title,
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                ),
+              ),
+              ?action,
+            ],
           ),
         ),
-        if (entries.isEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AppTokens.spaceM),
-            child: Text(emptyText),
-          ),
-        for (final (i, e) in entries.indexed)
-          MediaTile(
-            key: ValueKey('$title-${e.item.id}'),
-            entry: e,
-            // Resume a single item from Home rather than queueing the section.
-            onTap: () => LibraryActions.playFrom(context, ref, [entries[i]], 0),
-          ),
+        AnimatedSize(
+          duration: const Duration(milliseconds: 250),
+          child: entries.isEmpty
+              ? Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppTokens.spaceM,
+                  ),
+                  child: Text(emptyText),
+                )
+              : SizedBox(
+                  height: height,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppTokens.spaceM,
+                    ),
+                    itemCount: entries.length,
+                    separatorBuilder: (_, _) => const SizedBox(width: 12),
+                    itemBuilder: (context, i) => MediaCard(
+                      key: ValueKey('$title-${entries[i].item.id}'),
+                      entry: entries[i],
+                      width: cardWidth,
+                      showRemoveFromHistory: inHistory,
+                      // Resume a single item rather than queueing the row.
+                      onTap: () => LibraryActions.playFrom(context, ref, [
+                        entries[i],
+                      ], 0),
+                    ),
+                  ),
+                ),
+        ),
       ],
     );
   }

@@ -19,6 +19,7 @@ enum MediaOrigin { mediaStore, imported }
 @DataClassName('LibraryItem')
 @TableIndex(name: 'media_items_kind_title', columns: {#kind, #title})
 @TableIndex(name: 'media_items_kind_added', columns: {#kind, #addedAt})
+@TableIndex(name: 'media_items_folder', columns: {#kind, #folder})
 class MediaItems extends Table {
   TextColumn get id => text()();
   TextColumn get kind => textEnum<MediaKind>()();
@@ -168,8 +169,20 @@ class SyncMetadata extends Table {
   Set<Column> get primaryKey => {userId};
 }
 
+/// Folders the user chose to hide from the library (device-only, not synced).
+@DataClassName('HiddenFolderRow')
+class HiddenFolders extends Table {
+  /// MediaStore relative path, e.g. `DCIM/Camera/`.
+  TextColumn get folder => text()();
+  DateTimeColumn get hiddenAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {folder};
+}
+
 @DriftDatabase(
   tables: [
+    HiddenFolders,
     SyncTombstones,
     SyncMetadata,
     MediaItems,
@@ -208,7 +221,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -225,6 +238,10 @@ class AppDatabase extends _$AppDatabase {
       from2To3: (m, schema) async {
         await m.createTable(schema.syncTombstones);
         await m.createTable(schema.syncMetadata);
+      },
+      from3To4: (m, schema) async {
+        await m.createTable(schema.hiddenFolders);
+        await m.createIndex(schema.mediaItemsFolder);
       },
     ),
     beforeOpen: (details) async {

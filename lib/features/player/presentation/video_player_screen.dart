@@ -11,6 +11,7 @@ import '../../../app/providers.dart';
 import '../../../core/platform/screen_control.dart';
 import '../../playback/application/playback_coordinator.dart';
 import '../../playback/domain/play_queue.dart';
+import '../../playback/domain/seek.dart';
 import '../application/frame_capture_action.dart';
 import '../domain/subtitles.dart';
 import '../domain/video_gestures.dart';
@@ -18,6 +19,7 @@ import 'widgets/playback_debug_panel.dart';
 import 'widgets/player_sheets.dart';
 import 'widgets/queue_sheet.dart';
 import 'widgets/seek_bar.dart';
+import 'widgets/transport_controls.dart';
 
 enum _MenuAction {
   fit,
@@ -48,7 +50,6 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
   static const _hideAfter = Duration(seconds: 3);
   static const _minZoom = 1.0;
   static const _maxZoom = 4.0;
-  static const _doubleTapZoom = 2.0;
 
   final _transform = TransformationController();
   final _screen = const ScreenControl();
@@ -60,9 +61,15 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
   bool _pipSupported = false;
   VideoFit _fit = VideoFit.contain;
   Timer? _hideTimer;
-  Timer? _seekLabelTimer;
-  String? _seekLabel;
-  bool _seekLabelLeft = true;
+  // Double-tap seek chain: further taps on the same side within
+  // kSeekChainWindow add another step each.
+  Timer? _chainTimer;
+  int _chainSeconds = 0;
+  bool _chainLeft = true;
+
+  // Long-press = 2x while held.
+  bool _holdingFast = false;
+  double _speedBeforeHold = 1.0;
   Offset _doubleTapPosition = Offset.zero;
   String? _entryId;
   VideoPlayerController? _listened;
@@ -85,7 +92,7 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
     _coordinator.controller.removeListener(_onEngineChanged);
     _listened?.removeListener(_onValueChanged);
     _hideTimer?.cancel();
-    _seekLabelTimer?.cancel();
+    _chainTimer?.cancel();
     _transform.dispose();
     _screen.keepOn(false);
     // App brightness only applies while the player is open (spec 5.4).
@@ -235,41 +242,58 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
 
   void _onDoubleTap(double width) {
     if (_locked) return;
-    switch (doubleTapAction(
-      x: _doubleTapPosition.dx,
-      width: width,
-      zoomed: _zoomed,
-    )) {
-      case DoubleTapAction.rewind:
-        _seekBy(forward: false);
-      case DoubleTapAction.forward:
-        _seekBy(forward: true);
-      case DoubleTapAction.resetZoom:
-        _transform.value = Matrix4.identity();
-      case DoubleTapAction.zoomIn:
-        final p = _doubleTapPosition;
-        _transform.value = Matrix4.identity()
-          ..translateByDouble(
-            -p.dx * (_doubleTapZoom - 1),
-            -p.dy * (_doubleTapZoom - 1),
-            0,
-            1,
-          )
-          ..scaleByDouble(_doubleTapZoom, _doubleTapZoom, 1, 1);
+    final left =
+        doubleTapAction(x: _doubleTapPosition.dx, width: width) ==
+        DoubleTapAction.rewind;
+    _chainSeek(left: left);
+  }
+
+  /// Single taps continue an active seek chain on the same side; otherwise
+  /// they toggle the controls.
+  void _onTap(Offset position, double width) {
+    if (_locked) {
+      _showControls();
+      return;
+    }
+    final left = position.dx < width / 2;
+    if (_chainSeconds > 0 && left == _chainLeft) {
+      _chainSeek(left: left);
+    } else {
+      _toggleControls();
     }
   }
 
-  void _seekBy({required bool forward}) {
-    forward ? _coordinator.fastForward() : _coordinator.rewind();
-    _seekLabelTimer?.cancel();
+  void _chainSeek({required bool left}) {
+    left ? _coordinator.rewind() : _coordinator.fastForward();
+    HapticFeedback.lightImpact();
+    _chainTimer?.cancel();
     setState(() {
-      _seekLabel = forward ? '+10s' : '-10s';
-      _seekLabelLeft = !forward;
+      _chainSeconds = (_chainSeconds > 0 && left == _chainLeft)
+          ? _chainSeconds + kSeekStep.inSeconds
+          : kSeekStep.inSeconds;
+      _chainLeft = left;
     });
-    _seekLabelTimer = Timer(const Duration(milliseconds: 700), () {
-      if (mounted) setState(() => _seekLabel = null);
+    _chainTimer = Timer(kSeekChainWindow, () {
+      if (mounted) setState(() => _chainSeconds = 0);
     });
     if (_controlsVisible) _scheduleHide();
+  }
+
+  /// Seek buttons: same feedback as double-tap.
+  void _seekBy({required bool forward}) => _chainSeek(left: !forward);
+
+  void _onLongPressStart() {
+    if (_locked || !(_listened?.value.isPlaying ?? false)) return;
+    _speedBeforeHold = _coordinator.speed.value;
+    _coordinator.setSpeed(2.0);
+    HapticFeedback.mediumImpact();
+    setState(() => _holdingFast = true);
+  }
+
+  void _onLongPressEnd() {
+    if (!_holdingFast) return;
+    _coordinator.setSpeed(_speedBeforeHold);
+    setState(() => _holdingFast = false);
   }
 
   // ---------------------------------------------------------------------------
@@ -420,7 +444,8 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
                 _surface(controller),
                 _statusLayer(controller),
                 if (controller != null) _captions(controller),
-                if (_seekLabel != null) _seekFeedback(),
+                if (_chainSeconds > 0) _seekRipple(),
+                if (_holdingFast) _fastChip(),
                 if (_gestureLabel != null) _gestureFeedback(),
                 if (!_locked)
                   _controls(context, controller, entry?.media.title ?? '')
@@ -464,9 +489,11 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
                 (ref.watch(volumeGestureProvider).value ?? false));
         return GestureDetector(
           behavior: HitTestBehavior.opaque,
-          onTap: _locked ? () => _showControls() : _toggleControls,
+          onTapUp: (d) => _onTap(d.localPosition, constraints.maxWidth),
           onDoubleTapDown: (d) => _doubleTapPosition = d.localPosition,
           onDoubleTap: () => _onDoubleTap(constraints.maxWidth),
+          onLongPressStart: (_) => _onLongPressStart(),
+          onLongPressEnd: (_) => _onLongPressEnd(),
           onVerticalDragStart: gestures
               ? (d) => _onVerticalStart(d, constraints.maxWidth)
               : null,
@@ -583,31 +610,96 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
     );
   }
 
-  Widget _seekFeedback() {
-    return Align(
-      alignment: _seekLabelLeft
-          ? const Alignment(-0.6, 0)
-          : const Alignment(0.6, 0),
-      child: IgnorePointer(
-        child: Semantics(
-          liveRegion: true,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: Colors.black54,
-              borderRadius: BorderRadius.circular(24),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Text(
-                _seekLabel!,
-                style: const TextStyle(color: Colors.white, fontSize: 20),
+  /// Half-screen ripple on the tapped side with the accumulated seconds.
+  Widget _seekRipple() {
+    return LayoutBuilder(
+      builder: (context, c) {
+        final size = c.maxHeight * 1.6;
+        return Stack(
+          children: [
+            Positioned(
+              top: (c.maxHeight - size) / 2,
+              left: _chainLeft ? -size * 0.62 : null,
+              right: _chainLeft ? null : -size * 0.62,
+              child: IgnorePointer(
+                child: TweenAnimationBuilder<double>(
+                  key: ValueKey(_chainSeconds),
+                  tween: Tween(begin: 0.85, end: 1),
+                  duration: const Duration(milliseconds: 250),
+                  curve: Curves.easeOutBack,
+                  builder: (context, scale, child) =>
+                      Transform.scale(scale: scale, child: child),
+                  child: Container(
+                    width: size,
+                    height: size,
+                    decoration: const BoxDecoration(
+                      color: Color(0x33FFFFFF),
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                ),
               ),
+            ),
+            Align(
+              alignment: Alignment(_chainLeft ? -0.7 : 0.7, 0),
+              child: IgnorePointer(
+                child: Semantics(
+                  liveRegion: true,
+                  label:
+                      '${_chainLeft ? 'Back' : 'Forward'} $_chainSeconds seconds',
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        _chainLeft ? Icons.fast_rewind : Icons.fast_forward,
+                        color: Colors.white,
+                        size: 36,
+                      ),
+                      Text(
+                        '$_chainSeconds seconds',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _fastChip() => Align(
+    alignment: const Alignment(0, -0.8),
+    child: IgnorePointer(
+      child: Semantics(
+        liveRegion: true,
+        label: 'Playing at double speed',
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: Colors.black54,
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('2x', style: TextStyle(color: Colors.white, fontSize: 16)),
+                SizedBox(width: 4),
+                Icon(Icons.fast_forward, color: Colors.white, size: 18),
+              ],
             ),
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
 
   Widget _lockedOverlay() {
     return SafeArea(
@@ -805,7 +897,7 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
               v.isPlaying ? _coordinator.pause() : _coordinator.play();
               _showControls(autoHide: !v.isPlaying);
             },
-            icon: Icon(v.isPlaying ? Icons.pause : Icons.play_arrow),
+            icon: PlayPauseIcon(playing: v.isPlaying),
           ),
           IconButton(
             tooltip: 'Forward 10 seconds',

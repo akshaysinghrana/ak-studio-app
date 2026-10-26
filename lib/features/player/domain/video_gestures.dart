@@ -1,19 +1,13 @@
-enum DoubleTapAction { rewind, forward, zoomIn, resetZoom }
+enum DoubleTapAction { rewind, forward }
 
-/// Gesture arbitration for the video surface (spec 5.2, 4.2): while zoomed a
-/// double-tap only resets zoom, so zooming never triggers a seek. At 1x the
-/// outer thirds seek by the step and the centre zooms in.
-DoubleTapAction doubleTapAction({
-  required double x,
-  required double width,
-  required bool zoomed,
-}) {
-  if (zoomed) return DoubleTapAction.resetZoom;
-  if (width <= 0) return DoubleTapAction.zoomIn;
-  final fraction = x / width;
-  if (fraction < 1 / 3) return DoubleTapAction.rewind;
-  if (fraction > 2 / 3) return DoubleTapAction.forward;
-  return DoubleTapAction.zoomIn;
-}
+/// Double-tap on the left half rewinds and on the right half forwards by the
+/// seek step, at any zoom level. Zoom is pinch-only, so zooming and panning
+/// never trigger a seek (spec 5.2, 4.2).
+DoubleTapAction doubleTapAction({required double x, required double width}) =>
+    x < width / 2 ? DoubleTapAction.rewind : DoubleTapAction.forward;
+
+/// Consecutive taps on the same side within this window keep seeking
+/// (+10 s each), like popular video apps.
+const kSeekChainWindow = Duration(milliseconds: 700);
 
 enum VideoFit { contain, cover, stretch }

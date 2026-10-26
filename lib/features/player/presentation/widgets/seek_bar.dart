@@ -46,24 +46,66 @@ class _SeekBarState extends State<SeekBar> {
         return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Slider(
-              value: maxMs <= 0 ? 0 : positionMs.clamp(0, maxMs),
-              max: maxMs <= 0 ? 1 : maxMs,
-              onChangeStart: (_) => widget.onInteraction?.call(),
-              onChanged: maxMs <= 0
-                  ? null
-                  : (ms) {
-                      widget.onInteraction?.call();
-                      setState(() => _dragMs = ms);
-                    },
-              onChangeEnd: maxMs <= 0
-                  ? null
-                  : (ms) {
-                      widget.onSeek(Duration(milliseconds: ms.round()));
-                      setState(() => _dragMs = null);
-                    },
-              semanticFormatterCallback: (_) =>
-                  '${formatDuration(shown)} of ${formatDuration(duration)}',
+            LayoutBuilder(
+              builder: (context, c) {
+                final fraction = maxMs <= 0
+                    ? 0.0
+                    : (positionMs / maxMs).clamp(0.0, 1.0);
+                return Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Slider(
+                      value: maxMs <= 0 ? 0 : positionMs.clamp(0, maxMs),
+                      max: maxMs <= 0 ? 1 : maxMs,
+                      onChangeStart: (_) => widget.onInteraction?.call(),
+                      onChanged: maxMs <= 0
+                          ? null
+                          : (ms) {
+                              widget.onInteraction?.call();
+                              setState(() => _dragMs = ms);
+                            },
+                      onChangeEnd: maxMs <= 0
+                          ? null
+                          : (ms) {
+                              widget.onSeek(Duration(milliseconds: ms.round()));
+                              setState(() => _dragMs = null);
+                            },
+                      semanticFormatterCallback: (_) =>
+                          '${formatDuration(shown)} of ${formatDuration(duration)}',
+                    ),
+                    // Time bubble above the thumb while dragging.
+                    if (_dragMs != null)
+                      Positioned(
+                        left: (24 + fraction * (c.maxWidth - 48) - 36).clamp(
+                          0,
+                          c.maxWidth - 72,
+                        ),
+                        top: -30,
+                        child: IgnorePointer(
+                          child: Container(
+                            width: 72,
+                            padding: const EdgeInsets.symmetric(vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .inverseSurface,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              formatDuration(shown),
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onInverseSurface,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                );
+              },
             ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),

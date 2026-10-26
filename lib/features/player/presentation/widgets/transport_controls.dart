@@ -115,9 +115,7 @@ class TransportControls extends StatelessWidget {
                         onPressed: value.isPlaying
                             ? coordinator.pause
                             : coordinator.play,
-                        icon: Icon(
-                          value.isPlaying ? Icons.pause : Icons.play_arrow,
-                        ),
+                        icon: PlayPauseIcon(playing: value.isPlaying),
                       ),
                       IconButton(
                         tooltip: 'Forward 10 seconds',
@@ -150,4 +148,36 @@ String formatDuration(Duration d) {
   final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
   final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
   return h > 0 ? '$h:$m:$s' : '$m:$s';
+}
+
+/// Play/pause icon that morphs between states.
+class PlayPauseIcon extends StatelessWidget {
+  const PlayPauseIcon({
+    super.key,
+    required this.playing,
+    this.size,
+    this.color,
+  });
+
+  final bool playing;
+  final double? size;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) => AnimatedSwitcher(
+    duration: const Duration(milliseconds: 200),
+    transitionBuilder: (child, a) => ScaleTransition(
+      scale: a,
+      child: RotationTransition(
+        turns: Tween(begin: 0.75, end: 1.0).animate(a),
+        child: child,
+      ),
+    ),
+    child: Icon(
+      playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
+      key: ValueKey(playing),
+      size: size,
+      color: color,
+    ),
+  );
 }

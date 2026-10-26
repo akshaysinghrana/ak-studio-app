@@ -6,6 +6,7 @@ import 'package:video_music_app/core/permissions/media_permissions.dart';
 import 'package:video_music_app/features/library/data/media_library_repository.dart';
 import 'package:video_music_app/features/library/presentation/media_list_screen.dart';
 import 'package:video_music_app/features/playback/domain/media_source.dart';
+import 'package:video_music_app/features/settings/data/preferences_repository.dart';
 import 'package:video_music_app/shared/data/app_database.dart';
 
 import '../support/fakes.dart';
@@ -49,6 +50,14 @@ void main() {
     await settle(tester);
   }
 
+  /// List-mode tests: "All" items, list layout.
+  Future<void> allItemsAsList(WidgetTester tester, MediaKind kind) =>
+      tester.runAsync(() async {
+        final prefs = PreferencesRepository(db);
+        await prefs.setFolderView(kind.name, false);
+        await prefs.setGridLayout(false);
+      });
+
   Future<void> index(WidgetTester tester) => tester.runAsync(
     () => MediaLibraryRepository(
       db,
@@ -88,6 +97,7 @@ void main() {
     await index(tester);
     store.videos = [store.videos.first];
     await index(tester);
+    await allItemsAsList(tester, MediaKind.video);
     await pump(tester, MediaKind.video);
 
     expect(find.text('Holiday'), findsOneWidget);
@@ -111,6 +121,7 @@ void main() {
       record(2, kind: MediaKind.audio, title: 'Song B', durationMs: 61000),
     ];
     await index(tester);
+    await allItemsAsList(tester, MediaKind.audio);
     await pump(tester, MediaKind.audio);
     expect(find.text('Band · 01:00'), findsOneWidget);
     expect(find.text('01:01'), findsOneWidget);
@@ -133,6 +144,11 @@ void main() {
       ),
     ];
     await index(tester);
+    // Grid cards (the default "All videos" layout) at 2x text.
+    await tester.runAsync(
+      () =>
+          PreferencesRepository(db).setFolderView(MediaKind.video.name, false),
+    );
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -157,4 +173,39 @@ void main() {
     expect(find.textContaining('A rather long'), findsOneWidget);
     await unmount(tester);
   });
+
+  testWidgets(
+    'folders view groups videos; hiding a folder moves it to Hidden',
+    (tester) async {
+      store.videos = [
+        record(1, title: 'Beach', folder: 'DCIM/Camera/'),
+        record(2, title: 'Party', folder: 'DCIM/Camera/'),
+        record(3, title: 'Trip', folder: 'Movies/Trips/'),
+      ];
+      await index(tester);
+      await pump(tester, MediaKind.video);
+      expect(find.text('Camera'), findsOneWidget);
+      expect(find.text('Trips'), findsOneWidget);
+      expect(find.textContaining('2 videos'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Folder options for Camera'));
+      // Let the popup finish opening (it ignores taps while animating).
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Hide folder'));
+      await tester.pump(const Duration(milliseconds: 500));
+      await settle(tester);
+      expect(find.text('Camera'), findsNothing);
+      expect(find.text('Hidden folders (1)'), findsOneWidget);
+      expect(find.text('Undo'), findsOneWidget);
+
+      // "All videos" no longer lists the hidden folder's items.
+      await tester.tap(find.text('All videos'));
+      await settle(tester);
+      await tester.pump(const Duration(milliseconds: 300));
+      await settle(tester);
+      expect(find.text('Trip'), findsOneWidget);
+      expect(find.text('Beach'), findsNothing);
+      await unmount(tester);
+    },
+  );
 }

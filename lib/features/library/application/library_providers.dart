@@ -5,14 +5,36 @@ import '../../../core/permissions/media_permissions.dart';
 import '../../playback/domain/media_source.dart';
 import '../data/media_library_repository.dart';
 
-typedef LibraryQuery = ({MediaKind kind, LibrarySort sort, String search});
+typedef LibraryQuery = ({
+  MediaKind kind,
+  LibrarySort sort,
+  String search,
+  String? folder,
+});
 
 final libraryProvider = StreamProvider.autoDispose
     .family<List<LibraryEntry>, LibraryQuery>(
       (ref, q) => ref
           .watch(libraryRepositoryProvider)
-          .watch(q.kind, sort: q.sort, search: q.search),
+          .watch(q.kind, sort: q.sort, search: q.search, folder: q.folder),
     );
+
+final foldersProvider = StreamProvider.autoDispose
+    .family<List<FolderSummary>, MediaKind>(
+      (ref, kind) => ref.watch(libraryRepositoryProvider).watchFolders(kind),
+    );
+
+final hiddenFoldersProvider = StreamProvider.autoDispose<List<String>>(
+  (ref) => ref.watch(libraryRepositoryProvider).watchHiddenFolders(),
+);
+
+final folderViewProvider = StreamProvider.autoDispose.family<bool, MediaKind>(
+  (ref, kind) => ref.watch(preferencesProvider).watchFolderView(kind.name),
+);
+
+final gridLayoutProvider = StreamProvider.autoDispose<bool>(
+  (ref) => ref.watch(preferencesProvider).watchGridLayout(),
+);
 
 final continueProvider = StreamProvider.autoDispose<List<LibraryEntry>>(
   (ref) => ref.watch(libraryRepositoryProvider).watchContinue(),

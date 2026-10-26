@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:video_player/video_player.dart';
@@ -9,6 +10,7 @@ import '../../../app/theme/app_theme.dart';
 import '../../playback/domain/media_source.dart';
 import '../../playback/application/playback_coordinator.dart';
 import '../../playback/domain/play_queue.dart';
+import 'widgets/transport_controls.dart';
 
 /// Compact player above the navigation bar whenever an item is active
 /// (spec 3). Tapping it opens Now Playing.
@@ -30,33 +32,46 @@ class MiniPlayer extends ConsumerWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               _MiniProgress(coordinator: coordinator),
-              SizedBox(
-                height: AppTokens.miniPlayerHeight,
-                child: ListTile(
-                  onTap: () => context.push(Routes.player),
-                  leading: Icon(isVideo ? Icons.movie : Icons.music_note),
-                  title: Text(
-                    current.media.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  subtitle: Text(
-                    current.media.artist ?? (isVideo ? 'Video' : 'Audio'),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _PlayPause(coordinator: coordinator),
-                      IconButton(
-                        tooltip: 'Next',
-                        onPressed: queue.hasNext
-                            ? coordinator.skipToNext
-                            : null,
-                        icon: const Icon(Icons.skip_next),
-                      ),
-                    ],
+              GestureDetector(
+                // Swipe left for next, right for previous.
+                onHorizontalDragEnd: (d) {
+                  final v = d.primaryVelocity ?? 0;
+                  if (v < -300 && queue.hasNext) {
+                    HapticFeedback.selectionClick();
+                    coordinator.skipToNext();
+                  } else if (v > 300) {
+                    HapticFeedback.selectionClick();
+                    coordinator.skipToPrevious();
+                  }
+                },
+                child: SizedBox(
+                  height: AppTokens.miniPlayerHeight,
+                  child: ListTile(
+                    onTap: () => context.push(Routes.player),
+                    leading: Icon(isVideo ? Icons.movie : Icons.music_note),
+                    title: Text(
+                      current.media.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    subtitle: Text(
+                      current.media.artist ?? (isVideo ? 'Video' : 'Audio'),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _PlayPause(coordinator: coordinator),
+                        IconButton(
+                          tooltip: 'Next',
+                          onPressed: queue.hasNext
+                              ? coordinator.skipToNext
+                              : null,
+                          icon: const Icon(Icons.skip_next),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -92,7 +107,7 @@ class _PlayPause extends StatelessWidget {
           builder: (context, value, _) => IconButton(
             tooltip: value.isPlaying ? 'Pause' : 'Play',
             onPressed: value.isPlaying ? coordinator.pause : coordinator.play,
-            icon: Icon(value.isPlaying ? Icons.pause : Icons.play_arrow),
+            icon: PlayPauseIcon(playing: value.isPlaying),
           ),
         );
       },

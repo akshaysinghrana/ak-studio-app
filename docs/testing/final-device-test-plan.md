@@ -24,7 +24,7 @@ Run this once, on the physical Android phone, after all features are built (agre
 | 4 | Import | Choose files → MP4 + MP3; force-stop; reopen | Items still play (persisted grant), no file copy |
 | 5 | Missing file | Delete an indexed video with Files; Rescan | Item stays listed as **Unavailable**; Rescan/Remove offered; playlists keep it |
 | 6 | Video player | Play a video; tap, wait 3 s, pause | Controls hide while playing and stay visible while paused |
-| 7 | Double-tap zones | Double-tap left / centre / right; zoom in, then double-tap left | −10 s / 2× zoom / +10 s; while zoomed, double-tap only resets zoom |
+| 7 | Double-tap seek | Double-tap the left half and the right half; keep tapping the same side; pinch-zoom, then double-tap | −10 s / +10 s with a ripple; each further tap adds 10 s ("30 seconds"); still seeks while zoomed, and pinch never seeks |
 | 8 | Fit / fullscreen / rotation lock | Aspect ratio Fit/Crop/Stretch; Fullscreen; Lock rotation; back | Modes apply; orientation and system bars restored on exit |
 | 9 | Controls lock | Lock controls, then tap | Only the unlock button appears; gestures ignored |
 | 10 | Screenshot | Capture in the full-screen player | Saved to the album at video resolution, without controls |
@@ -46,3 +46,10 @@ Run this once, on the physical Android phone, after all features are built (agre
 | 26 | Large text / TalkBack | Font size max; TalkBack through Home, player, queue | No clipped controls; all buttons announced |
 | 27 | Theme | Settings → Light / System | Applies immediately and persists |
 | 28 | Icon | Launcher, themed icons on (Android 13+) | Original icon; monochrome version when themed |
+| 29 | Folders | Videos tab → Folders (default) → open a folder; switch to All videos | Videos grouped by their real folders with counts and sizes; the folder opens its videos |
+| 30 | Hide / show folder | Folder menu → Hide folder → Undo; hide again; check Home and search; Hidden folders → Show | Hidden folder leaves the lists, Home and search; Undo works; Show restores it |
+| 31 | Watch history | Home → Continue → card menu → Remove from history; Home → Clear (confirm); Settings → Clear watch history | Items leave Continue; resume positions reset; library and playlists kept |
+| 32 | Long-press 2× | Long-press during video playback, then release | "2x" chip while held; previous speed restored on release |
+| 33 | Grid / list | Videos → All videos → grid/list toggle; large text | Cards with duration badge and progress; choice remembered; no clipped text |
+| 34 | Interactions | Pull down to refresh lists; swipe the mini-player left/right; drag the seek bar | Rescan runs; next/previous with haptics; time bubble follows the thumb |
+| 35 | App icon | Launcher with circle and rounded-square icon shapes | Supplied Akshay Studio artwork; logo and wordmark not clipped |

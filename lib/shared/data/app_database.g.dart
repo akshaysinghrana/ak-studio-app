@@ -3,6 +3,223 @@
 part of 'app_database.dart';
 
 // ignore_for_file: type=lint
+class $HiddenFoldersTable extends HiddenFolders
+    with TableInfo<$HiddenFoldersTable, HiddenFolderRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $HiddenFoldersTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _folderMeta = const VerificationMeta('folder');
+  @override
+  late final GeneratedColumn<String> folder = GeneratedColumn<String>(
+    'folder',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _hiddenAtMeta = const VerificationMeta(
+    'hiddenAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> hiddenAt = GeneratedColumn<DateTime>(
+    'hidden_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [folder, hiddenAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'hidden_folders';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<HiddenFolderRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('folder')) {
+      context.handle(
+        _folderMeta,
+        folder.isAcceptableOrUnknown(data['folder']!, _folderMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_folderMeta);
+    }
+    if (data.containsKey('hidden_at')) {
+      context.handle(
+        _hiddenAtMeta,
+        hiddenAt.isAcceptableOrUnknown(data['hidden_at']!, _hiddenAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_hiddenAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {folder};
+  @override
+  HiddenFolderRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return HiddenFolderRow(
+      folder: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}folder'],
+      )!,
+      hiddenAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}hidden_at'],
+      )!,
+    );
+  }
+
+  @override
+  $HiddenFoldersTable createAlias(String alias) {
+    return $HiddenFoldersTable(attachedDatabase, alias);
+  }
+}
+
+class HiddenFolderRow extends DataClass implements Insertable<HiddenFolderRow> {
+  /// MediaStore relative path, e.g. `DCIM/Camera/`.
+  final String folder;
+  final DateTime hiddenAt;
+  const HiddenFolderRow({required this.folder, required this.hiddenAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['folder'] = Variable<String>(folder);
+    map['hidden_at'] = Variable<DateTime>(hiddenAt);
+    return map;
+  }
+
+  HiddenFoldersCompanion toCompanion(bool nullToAbsent) {
+    return HiddenFoldersCompanion(
+      folder: Value(folder),
+      hiddenAt: Value(hiddenAt),
+    );
+  }
+
+  factory HiddenFolderRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return HiddenFolderRow(
+      folder: serializer.fromJson<String>(json['folder']),
+      hiddenAt: serializer.fromJson<DateTime>(json['hiddenAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'folder': serializer.toJson<String>(folder),
+      'hiddenAt': serializer.toJson<DateTime>(hiddenAt),
+    };
+  }
+
+  HiddenFolderRow copyWith({String? folder, DateTime? hiddenAt}) =>
+      HiddenFolderRow(
+        folder: folder ?? this.folder,
+        hiddenAt: hiddenAt ?? this.hiddenAt,
+      );
+  HiddenFolderRow copyWithCompanion(HiddenFoldersCompanion data) {
+    return HiddenFolderRow(
+      folder: data.folder.present ? data.folder.value : this.folder,
+      hiddenAt: data.hiddenAt.present ? data.hiddenAt.value : this.hiddenAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('HiddenFolderRow(')
+          ..write('folder: $folder, ')
+          ..write('hiddenAt: $hiddenAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(folder, hiddenAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is HiddenFolderRow &&
+          other.folder == this.folder &&
+          other.hiddenAt == this.hiddenAt);
+}
+
+class HiddenFoldersCompanion extends UpdateCompanion<HiddenFolderRow> {
+  final Value<String> folder;
+  final Value<DateTime> hiddenAt;
+  final Value<int> rowid;
+  const HiddenFoldersCompanion({
+    this.folder = const Value.absent(),
+    this.hiddenAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  HiddenFoldersCompanion.insert({
+    required String folder,
+    required DateTime hiddenAt,
+    this.rowid = const Value.absent(),
+  }) : folder = Value(folder),
+       hiddenAt = Value(hiddenAt);
+  static Insertable<HiddenFolderRow> custom({
+    Expression<String>? folder,
+    Expression<DateTime>? hiddenAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (folder != null) 'folder': folder,
+      if (hiddenAt != null) 'hidden_at': hiddenAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  HiddenFoldersCompanion copyWith({
+    Value<String>? folder,
+    Value<DateTime>? hiddenAt,
+    Value<int>? rowid,
+  }) {
+    return HiddenFoldersCompanion(
+      folder: folder ?? this.folder,
+      hiddenAt: hiddenAt ?? this.hiddenAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (folder.present) {
+      map['folder'] = Variable<String>(folder.value);
+    }
+    if (hiddenAt.present) {
+      map['hidden_at'] = Variable<DateTime>(hiddenAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('HiddenFoldersCompanion(')
+          ..write('folder: $folder, ')
+          ..write('hiddenAt: $hiddenAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $SyncTombstonesTable extends SyncTombstones
     with TableInfo<$SyncTombstonesTable, SyncTombstoneRow> {
   @override
@@ -4051,6 +4268,7 @@ class FavoritesCompanion extends UpdateCompanion<FavoriteRow> {
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
+  late final $HiddenFoldersTable hiddenFolders = $HiddenFoldersTable(this);
   late final $SyncTombstonesTable syncTombstones = $SyncTombstonesTable(this);
   late final $SyncMetadataTable syncMetadata = $SyncMetadataTable(this);
   late final $MediaItemsTable mediaItems = $MediaItemsTable(this);
@@ -4075,6 +4293,10 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     'media_items_kind_added',
     'CREATE INDEX media_items_kind_added ON media_items (kind, added_at)',
   );
+  late final Index mediaItemsFolder = Index(
+    'media_items_folder',
+    'CREATE INDEX media_items_folder ON media_items (kind, folder)',
+  );
   late final Index playbackProgressLastPlayed = Index(
     'playback_progress_last_played',
     'CREATE INDEX playback_progress_last_played ON playback_progress (last_played_at)',
@@ -4088,6 +4310,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
   @override
   List<DatabaseSchemaEntity> get allSchemaEntities => [
+    hiddenFolders,
     syncTombstones,
     syncMetadata,
     mediaItems,
@@ -4100,6 +4323,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     favorites,
     mediaItemsKindTitle,
     mediaItemsKindAdded,
+    mediaItemsFolder,
     playbackProgressLastPlayed,
     playlistEntriesOrder,
   ];
@@ -4146,6 +4370,158 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       const DriftDatabaseOptions(storeDateTimeAsText: true);
 }
 
+typedef $$HiddenFoldersTableCreateCompanionBuilder =
+    HiddenFoldersCompanion Function({
+      required String folder,
+      required DateTime hiddenAt,
+      Value<int> rowid,
+    });
+typedef $$HiddenFoldersTableUpdateCompanionBuilder =
+    HiddenFoldersCompanion Function({
+      Value<String> folder,
+      Value<DateTime> hiddenAt,
+      Value<int> rowid,
+    });
+
+class $$HiddenFoldersTableFilterComposer
+    extends Composer<_$AppDatabase, $HiddenFoldersTable> {
+  $$HiddenFoldersTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get folder => $composableBuilder(
+    column: $table.folder,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get hiddenAt => $composableBuilder(
+    column: $table.hiddenAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$HiddenFoldersTableOrderingComposer
+    extends Composer<_$AppDatabase, $HiddenFoldersTable> {
+  $$HiddenFoldersTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get folder => $composableBuilder(
+    column: $table.folder,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get hiddenAt => $composableBuilder(
+    column: $table.hiddenAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$HiddenFoldersTableAnnotationComposer
+    extends Composer<_$AppDatabase, $HiddenFoldersTable> {
+  $$HiddenFoldersTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get folder =>
+      $composableBuilder(column: $table.folder, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get hiddenAt =>
+      $composableBuilder(column: $table.hiddenAt, builder: (column) => column);
+}
+
+class $$HiddenFoldersTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $HiddenFoldersTable,
+          HiddenFolderRow,
+          $$HiddenFoldersTableFilterComposer,
+          $$HiddenFoldersTableOrderingComposer,
+          $$HiddenFoldersTableAnnotationComposer,
+          $$HiddenFoldersTableCreateCompanionBuilder,
+          $$HiddenFoldersTableUpdateCompanionBuilder,
+          (
+            HiddenFolderRow,
+            BaseReferences<_$AppDatabase, $HiddenFoldersTable, HiddenFolderRow>,
+          ),
+          HiddenFolderRow,
+          PrefetchHooks Function()
+        > {
+  $$HiddenFoldersTableTableManager(_$AppDatabase db, $HiddenFoldersTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$HiddenFoldersTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$HiddenFoldersTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$HiddenFoldersTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> folder = const Value.absent(),
+                Value<DateTime> hiddenAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => HiddenFoldersCompanion(
+                folder: folder,
+                hiddenAt: hiddenAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String folder,
+                required DateTime hiddenAt,
+                Value<int> rowid = const Value.absent(),
+              }) => HiddenFoldersCompanion.insert(
+                folder: folder,
+                hiddenAt: hiddenAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$HiddenFoldersTable, HiddenFolderRow>(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $HiddenFoldersTable,
+                    HiddenFolderRow
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$HiddenFoldersTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $HiddenFoldersTable,
+      HiddenFolderRow,
+      $$HiddenFoldersTableFilterComposer,
+      $$HiddenFoldersTableOrderingComposer,
+      $$HiddenFoldersTableAnnotationComposer,
+      $$HiddenFoldersTableCreateCompanionBuilder,
+      $$HiddenFoldersTableUpdateCompanionBuilder,
+      (
+        HiddenFolderRow,
+        BaseReferences<_$AppDatabase, $HiddenFoldersTable, HiddenFolderRow>,
+      ),
+      HiddenFolderRow,
+      PrefetchHooks Function()
+    >;
 typedef $$SyncTombstonesTableCreateCompanionBuilder =
     SyncTombstonesCompanion Function({
       required String kind,
@@ -7408,6 +7784,8 @@ typedef $$FavoritesTableProcessedTableManager =
 class $AppDatabaseManager {
   final _$AppDatabase _db;
   $AppDatabaseManager(this._db);
+  $$HiddenFoldersTableTableManager get hiddenFolders =>
+      $$HiddenFoldersTableTableManager(_db, _db.hiddenFolders);
   $$SyncTombstonesTableTableManager get syncTombstones =>
       $$SyncTombstonesTableTableManager(_db, _db.syncTombstones);
   $$SyncMetadataTableTableManager get syncMetadata =>

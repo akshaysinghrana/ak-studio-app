@@ -7,6 +7,7 @@ import '../../../app/providers.dart';
 import '../../../app/router.dart';
 import '../../../core/permissions/media_permissions.dart';
 import '../../library/application/library_providers.dart';
+import '../../library/presentation/hidden_folders_screen.dart';
 import '../../library/presentation/library_actions.dart';
 import '../../player/domain/subtitles.dart';
 import 'privacy_screen.dart';
@@ -151,6 +152,25 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               'Add individual files with the system picker.',
             ),
             onTap: () => LibraryActions.importFiles(context, ref),
+          ),
+          ListTile(
+            leading: const Icon(Icons.visibility_off_outlined),
+            title: const Text('Hidden folders'),
+            subtitle: Text(
+              '${ref.watch(hiddenFoldersProvider).value?.length ?? 0} hidden',
+            ),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const HiddenFoldersScreen(),
+              ),
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.history),
+            title: const Text('Clear watch history'),
+            subtitle: const Text('Continue list and resume positions'),
+            onTap: () => LibraryActions.confirmClearHistory(context, ref),
           ),
           ListTile(
             leading: const Icon(Icons.lock_outline),
