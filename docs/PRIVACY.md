@@ -2,7 +2,7 @@
 
 > **Status:** draft for review. It must be completed, reviewed and published at a public URL before any public release (spec 9.3).
 
-**Unified Media Player** plays video and music files that are already on your device.
+**AS Media** plays video and music files that are already on your device.
 
 ## Data that stays on your device
 - Your video and music files are never uploaded.

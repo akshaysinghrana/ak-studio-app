@@ -17,7 +17,7 @@ class MediaPlayerApp extends ConsumerWidget {
     final pip = ref.watch(pictureInPictureProvider);
     final coordinator = ref.watch(coordinatorProvider);
     return MaterialApp.router(
-      title: 'Unified Media Player',
+      title: 'AS Media',
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),
       themeMode: themeMode,

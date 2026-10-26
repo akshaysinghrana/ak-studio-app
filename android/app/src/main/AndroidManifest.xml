@@ -37,7 +37,7 @@
         tools:node="remove" />
 
     <application
-        android:label="Unified Media Player"
+        android:label="AS Media"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:allowBackup="false">

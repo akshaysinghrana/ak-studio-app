@@ -201,7 +201,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             title: const Text('Open-source licences'),
             onTap: () => showLicensePage(
               context: context,
-              applicationName: 'Unified Media Player',
+              applicationName: 'AS Media',
             ),
           ),
           if (kDebugMode) ...[
