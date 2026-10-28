@@ -13,3 +13,6 @@ key.properties
 **/*.keystore
 **/*.jks
 /build/
+
+# Kotlin compiler session/cache files
+.kotlin/
