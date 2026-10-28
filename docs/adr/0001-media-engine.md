@@ -37,7 +37,7 @@ Adopt **A1** for the Phase 1 proof of concept:
   - audio keeps playing
   - video keeps playing only when the setting is on; otherwise it pauses and saves position
   - returning to the foreground never auto-resumes
-- Frame capture is a Kotlin `MethodChannel` (`FrameCapture.kt`) that decodes the frame at the current position from the source file at full resolution. The frame is saved with `gal` into the album "Media Player Screenshots", and `share_plus` is the fallback when saving is denied.
+- Frame capture is a Kotlin `MethodChannel` (`FrameCapture.kt`) that decodes the frame at the current position from the source file at full resolution. The frame is saved with `gal` into the album "AS Media Screenshots", and `share_plus` is the fallback when saving is denied.
 - Zoom uses `InteractiveViewer` (1×–4×, zero boundary margin) over the texture-backed `VideoPlayer`. Double-tap toggles 2× or resets, and an explicit "Reset zoom" button is always shown. Zoom resets on each new queue entry.
 
 ### Source findings that support A1 (video_player_android 2.12.2)

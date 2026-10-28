@@ -5,7 +5,7 @@ import 'package:share_plus/share_plus.dart';
 
 import '../../../core/platform/frame_capture.dart';
 
-const screenshotAlbum = 'Media Player Screenshots';
+const screenshotAlbum = 'AS Media Screenshots';
 
 /// Captures the decoded frame at [position] (never the Flutter UI), saves it
 /// to the gallery album and offers Share; falls back to Share when gallery

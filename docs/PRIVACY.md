@@ -8,7 +8,7 @@
 - Your video and music files are never uploaded.
 - The library index is stored only in the app's local database. It contains titles, durations, sizes, folders and content URIs.
 - Playback positions, the queue, playlists, favourites and settings are stored locally.
-- Frame screenshots are saved to the "Media Player Screenshots" album and shared only on request.
+- Frame screenshots are saved to the "AS Media Screenshots" album and shared only on request.
 
 ## Permissions
 - **Media access (videos and audio):** requested only when you start a library scan. On Android 14+ you can allow selected videos only.

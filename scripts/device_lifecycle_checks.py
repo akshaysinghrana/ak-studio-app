@@ -24,7 +24,7 @@ import time
 import xml.etree.ElementTree as ET
 
 PKG = "com.akshayrana.video_music_app"
-ALBUM = "Media Player Screenshots"
+ALBUM = "AS Media Screenshots"
 DEV = sys.argv[1]
 RESULTS = []
 

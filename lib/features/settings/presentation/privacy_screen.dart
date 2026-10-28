@@ -51,7 +51,7 @@ class PrivacyScreen extends StatelessWidget {
           ),
           section(
             'Screenshots',
-            'Frames you capture are saved to the "Media Player Screenshots" '
+            'Frames you capture are saved to the "AS Media Screenshots" '
                 'album on your device and shared only when you choose to.',
           ),
         ],

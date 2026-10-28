@@ -12,7 +12,7 @@ Record for each run: device model, Android version, result (pass/fail) and notes
 | 2 | Tap −10 / +10 several times, then near the start and the end | Moves exactly 10 s and stops at 0 and at the duration. "−10s"/"+10s" feedback appears |
 | 3 | Short clip (<10 s): ±10 | Stays at 0 or at the end. No crash |
 | 4 | Pinch to zoom, pan, double-tap, Reset zoom, Crop/Fit | Zoom works between 1× and 4×. The video cannot be panned off-screen. Reset works |
-| 5 | Capture frame (controls visible) | Photo in the gallery album "Media Player Screenshots" shows the video frame only, at full resolution, with no controls. Share works |
+| 5 | Capture frame (controls visible) | Photo in the gallery album "AS Media Screenshots" shows the video frame only, at full resolution, with no controls. Share works |
 | 6 | Setting **off**, MP4 playing → lock screen | Audio pauses. After unlock, it stays paused at the same position |
 | 7 | Setting **off**, MP4 playing → home button / switch app | Audio pauses |
 | 8 | Setting **on**, MP4 playing → lock screen for ≥2 min | Audio continues. The lock-screen controls show the title |
