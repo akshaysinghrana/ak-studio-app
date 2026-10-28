@@ -53,3 +53,11 @@ Run this once, on the physical Android phone, after all features are built (agre
 | 33 | Grid / list | Videos → All videos → grid/list toggle; large text | Cards with duration badge and progress; choice remembered; no clipped text |
 | 34 | Interactions | Pull down to refresh lists; swipe the mini-player left/right; drag the seek bar | Rescan runs; next/previous with haptics; time bubble follows the thumb |
 | 35 | App icon | Launcher with circle and rounded-square icon shapes | Supplied Akshay Studio artwork; logo and wordmark not clipped |
+| 36 | Background video audio (fix) | Setting on → play a video → lock the phone **unplugged** for 15+ min → unlock | Audio keeps playing; the picture returns in sync on unlock |
+| 37 | Battery item | Settings → Background playback | Shows the restriction state; opens the app's system page (choose Battery → Unrestricted) |
+| 38 | Lock-screen card | Play an MP3 without art, lock | Card shows the title and controls with the AS Media logo |
+| 39 | Delete | Item menu → Delete… → Move to trash / Delete permanently; folder → Delete folder | Android confirms; items leave the app; trashed items can be restored from the Files app |
+| 40 | External deletion | Delete a video in the Files app, return to AS Media | It disappears without a manual scan |
+| 41 | Sorting | Folders: name/most items/size/recent; files: all 6 options; reopen the app | Order changes; choice remembered |
+| 42 | MP3 artwork | MP3 with embedded cover and one without | Real cover, or gradient art |
+| 43 | Design | Home, Videos, Music, Playlists, Settings, About, players; light theme | New AS Media look; About says "Created by Akshay Studio" |

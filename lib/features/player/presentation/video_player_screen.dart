@@ -367,6 +367,7 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
       case _MenuAction.debug:
         await showModalBottomSheet<void>(
           context: context,
+          useRootNavigator: true,
           builder: (_) => SingleChildScrollView(
             child: PlaybackDebugPanel(coordinator: _coordinator),
           ),
@@ -404,6 +405,7 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
     };
     final picked = await showModalBottomSheet<VideoFit>(
       context: context,
+      useRootNavigator: true,
       builder: (context) => SafeArea(
         child: RadioGroup<VideoFit>(
           groupValue: _fit,
@@ -739,31 +741,44 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
       duration: const Duration(milliseconds: 200),
       child: IgnorePointer(
         ignoring: !_controlsVisible,
-        child: DecoratedBox(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [Colors.black54, Colors.transparent, Colors.black54],
-              stops: [0, 0.5, 1],
-            ),
-          ),
-          child: SafeArea(
-            child: IconButtonTheme(
-              data: IconButtonThemeData(
-                style: IconButton.styleFrom(foregroundColor: fg),
-              ),
-              child: Column(
-                children: [
-                  _topBar(context, controller, title),
-                  const Spacer(),
-                  if (controller != null) _centerRow(controller),
-                  const Spacer(),
-                  if (controller != null) _bottomBar(controller),
-                ],
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            // Scrim only: it must not absorb touches, so taps and double-taps
+            // in empty areas reach the video surface below.
+            const IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Color(0xAA000000),
+                      Colors.transparent,
+                      Color(0xCC000000),
+                    ],
+                    stops: [0, 0.45, 1],
+                  ),
+                ),
               ),
             ),
-          ),
+            SafeArea(
+              child: IconButtonTheme(
+                data: IconButtonThemeData(
+                  style: IconButton.styleFrom(foregroundColor: fg),
+                ),
+                child: Column(
+                  children: [
+                    _topBar(context, controller, title),
+                    const Spacer(),
+                    if (controller != null) _centerRow(controller),
+                    const Spacer(),
+                    if (controller != null) _bottomBar(controller),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -878,34 +893,18 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
     );
   }
 
+  /// Only the large play/pause sits in the centre; seeking lives in the
+  /// bottom bar and on double-tap.
   Widget _centerRow(VideoPlayerController controller) {
     return ValueListenableBuilder<VideoPlayerValue>(
       valueListenable: controller,
-      builder: (context, v, _) => Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-          IconButton(
-            tooltip: 'Rewind 10 seconds',
-            iconSize: 40,
-            onPressed: () => _seekBy(forward: false),
-            icon: const Icon(Icons.replay_10),
-          ),
-          IconButton.filled(
-            tooltip: v.isPlaying ? 'Pause' : 'Play',
-            iconSize: 56,
-            onPressed: () {
-              v.isPlaying ? _coordinator.pause() : _coordinator.play();
-              _showControls(autoHide: !v.isPlaying);
-            },
-            icon: PlayPauseIcon(playing: v.isPlaying),
-          ),
-          IconButton(
-            tooltip: 'Forward 10 seconds',
-            iconSize: 40,
-            onPressed: () => _seekBy(forward: true),
-            icon: const Icon(Icons.forward_10),
-          ),
-        ],
+      builder: (context, v, _) => GradientPlayButton(
+        playing: v.isPlaying,
+        size: 76,
+        onPressed: () {
+          v.isPlaying ? _coordinator.pause() : _coordinator.play();
+          _showControls(autoHide: !v.isPlaying);
+        },
       ),
     );
   }
@@ -923,17 +922,6 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
         Row(
           children: [
             IconButton(
-              tooltip: 'Previous',
-              onPressed: _coordinator.skipToPrevious,
-              icon: const Icon(Icons.skip_previous),
-            ),
-            IconButton(
-              tooltip: 'Next',
-              onPressed: _coordinator.skipToNext,
-              icon: const Icon(Icons.skip_next),
-            ),
-            const Spacer(),
-            IconButton(
               tooltip: 'Lock controls',
               onPressed: () {
                 _hideTimer?.cancel();
@@ -944,6 +932,28 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
               },
               icon: const Icon(Icons.lock_open),
             ),
+            const Spacer(),
+            IconButton(
+              tooltip: 'Previous',
+              onPressed: _coordinator.skipToPrevious,
+              icon: const Icon(Icons.skip_previous_rounded),
+            ),
+            IconButton(
+              tooltip: 'Rewind 10 seconds',
+              onPressed: () => _seekBy(forward: false),
+              icon: const Icon(Icons.replay_10_rounded),
+            ),
+            IconButton(
+              tooltip: 'Forward 10 seconds',
+              onPressed: () => _seekBy(forward: true),
+              icon: const Icon(Icons.forward_10_rounded),
+            ),
+            IconButton(
+              tooltip: 'Next',
+              onPressed: _coordinator.skipToNext,
+              icon: const Icon(Icons.skip_next_rounded),
+            ),
+            const Spacer(),
             if (_zoomed)
               IconButton(
                 tooltip: 'Reset zoom',

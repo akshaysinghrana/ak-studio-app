@@ -72,20 +72,16 @@ void main() {
       store.videos = [record(2)];
       final gone = await repo.scanMediaStore({MediaKind.video});
       expect(gone.missing, 1);
-      final afterDelete = await all(MediaKind.video);
-      expect(afterDelete, hasLength(2));
-      expect(
-        afterDelete.firstWhere((e) => e.item.storeId == 1).item.available,
-        isFalse,
-      );
+      // Deleted elsewhere: no longer listed, but the row (history) is kept.
+      expect(await all(MediaKind.video), hasLength(1));
+      final rows = await db.select(db.mediaItems).get();
+      expect(rows, hasLength(2));
+      expect(rows.firstWhere((r) => r.storeId == 1).available, isFalse);
 
       store.videos = [record(1), record(2)];
       final back = await repo.scanMediaStore({MediaKind.video});
       expect(back.restored, 1);
-      expect(
-        (await all(MediaKind.video)).every((e) => e.item.available),
-        isTrue,
-      );
+      expect(await all(MediaKind.video), hasLength(2));
     },
   );
 
@@ -132,7 +128,8 @@ void main() {
     await repo.importDocuments();
     importer.granted.clear();
     await repo.refreshImportedAccess();
-    expect((await all(MediaKind.video)).single.item.available, isFalse);
+    expect(await all(MediaKind.video), isEmpty);
+    expect((await db.select(db.mediaItems).getSingle()).available, isFalse);
   });
 
   test(
@@ -143,7 +140,8 @@ void main() {
       final id = (await all(MediaKind.video)).single.item.id;
       store.videos = [];
       await repo.verifyAvailability(id);
-      expect((await all(MediaKind.video)).single.item.available, isFalse);
+      expect(await all(MediaKind.video), isEmpty);
+      expect((await db.select(db.mediaItems).getSingle()).available, isFalse);
     },
   );
 
@@ -323,5 +321,71 @@ void main() {
     await repo.clearHistory();
     expect(await repo.watchContinue().first, isEmpty);
     expect(await all(MediaKind.video), hasLength(2));
+  });
+
+  group('delete files', () {
+    setUp(() async {
+      store.videos = [
+        record(1, folder: 'DCIM/Camera/'),
+        record(2, folder: 'DCIM/Camera/'),
+        record(3, folder: 'Movies/'),
+      ];
+      await repo.scanMediaStore({MediaKind.video});
+    });
+
+    test(
+      'trash removes the files from the library after confirmation',
+      () async {
+        final camera = await repo.itemsInFolder(
+          MediaKind.video,
+          'DCIM/Camera/',
+        );
+        expect(camera, hasLength(2));
+        expect(await repo.deleteFiles(camera, trash: true), isTrue);
+        expect(store.deleted.single.$2, isTrue);
+        expect(await all(MediaKind.video), hasLength(1));
+        expect(await db.select(db.mediaItems).get(), hasLength(1));
+      },
+    );
+
+    test('declining the system prompt deletes nothing', () async {
+      store.confirmDelete = false;
+      final items = await repo.itemsInFolder(MediaKind.video, 'Movies/');
+      expect(await repo.deleteFiles(items, trash: false), isFalse);
+      expect(await all(MediaKind.video), hasLength(3));
+    });
+  });
+
+  test('folder sorting by name, count, size and recency', () {
+    FolderSummary f(String path, int count, int bytes, int day) =>
+        FolderSummary(
+          folder: path,
+          count: count,
+          totalBytes: bytes,
+          hidden: false,
+          latestAddedAt: DateTime(2026, 1, day),
+        );
+    final folders = [
+      f('b/', 1, 300, 1),
+      f('a/', 3, 100, 2),
+      f('c/', 2, 200, 3),
+    ];
+    List<String> names(FolderSort s) => [
+      for (final x in sortFolders(folders, s)) x.name,
+    ];
+    expect(names(FolderSort.name), ['a', 'b', 'c']);
+    expect(names(FolderSort.itemCount), ['a', 'c', 'b']);
+    expect(names(FolderSort.size), ['b', 'c', 'a']);
+    expect(names(FolderSort.recent), ['c', 'a', 'b']);
+  });
+
+  test('kind counts exclude missing files and hidden folders', () async {
+    store.videos = [record(1, folder: 'A/'), record(2, folder: 'B/')];
+    store.audio = [record(3, kind: MediaKind.audio)];
+    await repo.scanMediaStore(MediaKind.values.toSet());
+    await repo.hideFolder('B/');
+    final counts = await repo.watchKindCounts().first;
+    expect(counts[MediaKind.video], 1);
+    expect(counts[MediaKind.audio], 1);
   });
 }

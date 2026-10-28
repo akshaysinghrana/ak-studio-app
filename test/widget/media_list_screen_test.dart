@@ -82,7 +82,7 @@ void main() {
     await unmount(tester);
   });
 
-  testWidgets('lists items with real metadata and labels unavailable ones', (
+  testWidgets('lists items with real metadata and hides missing files', (
     tester,
   ) async {
     store.videos = [
@@ -102,14 +102,8 @@ void main() {
 
     expect(find.text('Holiday'), findsOneWidget);
     expect(find.text('02:05 · 5.0 MB'), findsOneWidget);
-    expect(
-      find.text('Unavailable: file missing or access removed'),
-      findsOneWidget,
-    );
-    final gone = tester.widget<ListTile>(
-      find.ancestor(of: find.text('Gone'), matching: find.byType(ListTile)),
-    );
-    expect(gone.enabled, isFalse);
+    // Files deleted outside the app are not listed.
+    expect(find.text('Gone'), findsNothing);
     await unmount(tester);
   });
 

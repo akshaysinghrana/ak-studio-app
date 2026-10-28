@@ -1,7 +1,9 @@
 import 'package:audio_service/audio_service.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
 
+import '../../../../app/theme/app_theme.dart';
 import '../../../playback/application/playback_coordinator.dart';
 
 class PlaybackErrorBanner extends StatelessWidget {
@@ -109,13 +111,11 @@ class TransportControls extends StatelessWidget {
                         },
                         icon: const Icon(Icons.replay_10),
                       ),
-                      IconButton.filled(
-                        iconSize: 40,
-                        tooltip: value.isPlaying ? 'Pause' : 'Play',
+                      GradientPlayButton(
+                        playing: value.isPlaying,
                         onPressed: value.isPlaying
                             ? coordinator.pause
                             : coordinator.play,
-                        icon: PlayPauseIcon(playing: value.isPlaying),
                       ),
                       IconButton(
                         tooltip: 'Forward 10 seconds',
@@ -178,6 +178,62 @@ class PlayPauseIcon extends StatelessWidget {
       key: ValueKey(playing),
       size: size,
       color: color,
+    ),
+  );
+}
+
+/// Large circular play/pause filled with the brand gradient.
+class GradientPlayButton extends StatelessWidget {
+  const GradientPlayButton({
+    super.key,
+    required this.playing,
+    required this.onPressed,
+    this.size = 72,
+  });
+
+  final bool playing;
+  final VoidCallback onPressed;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    button: true,
+    label: playing ? 'Pause' : 'Play',
+    child: Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: AppColors.brand,
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.blue.withValues(alpha: 0.45),
+            blurRadius: 24,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      // Ripple clipped to the circle, painted over the gradient.
+      child: Material(
+        color: Colors.transparent,
+        shape: const CircleBorder(),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () {
+            HapticFeedback.selectionClick();
+            onPressed();
+          },
+          child: Center(
+            child: ExcludeSemantics(
+              child: PlayPauseIcon(
+                playing: playing,
+                size: size * 0.55,
+                color: Colors.white,
+              ),
+            ),
+          ),
+        ),
+      ),
     ),
   );
 }

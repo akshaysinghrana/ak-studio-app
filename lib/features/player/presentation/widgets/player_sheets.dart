@@ -16,6 +16,7 @@ Future<void> showSpeedSheet(
 ) {
   return showModalBottomSheet<void>(
     context: context,
+    useRootNavigator: true,
     builder: (context) => SafeArea(
       child: RadioGroup<double>(
         groupValue: coordinator.speed.value,
@@ -46,6 +47,7 @@ Future<void> showSleepTimerSheet(
   const minutes = [5, 10, 15, 30, 45, 60, 90];
   return showModalBottomSheet<void>(
     context: context,
+    useRootNavigator: true,
     builder: (context) => SafeArea(
       child: ListView(
         shrinkWrap: true,
@@ -85,6 +87,7 @@ Future<void> showSleepTimerSheet(
 Future<void> showSubtitleSheet(BuildContext context, WidgetRef ref) {
   return showModalBottomSheet<void>(
     context: context,
+    useRootNavigator: true,
     builder: (context) => const SafeArea(child: _SubtitleSheet()),
   );
 }
@@ -211,6 +214,7 @@ Future<void> showAudioTrackSheet(
   final selected = tracks.where((t) => t.isSelected).firstOrNull?.id;
   await showModalBottomSheet<void>(
     context: context,
+    useRootNavigator: true,
     builder: (context) => SafeArea(
       child: RadioGroup<String>(
         groupValue: selected,

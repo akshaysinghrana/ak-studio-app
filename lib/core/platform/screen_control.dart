@@ -25,4 +25,12 @@ class ScreenControl {
 
   Future<void> setVolume(double fraction) =>
       _channel.invokeMethod<void>('setVolume', fraction);
+
+  /// False when the app's battery use is optimised/restricted, which some
+  /// manufacturers use to stop background playback.
+  Future<bool> isBatteryUnrestricted() async =>
+      await _channel.invokeMethod<bool>('isBatteryUnrestricted') ?? true;
+
+  Future<void> openBatterySettings() =>
+      _channel.invokeMethod<void>('openBatterySettings');
 }

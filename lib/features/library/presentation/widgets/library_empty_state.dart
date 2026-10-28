@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../app/theme/app_theme.dart';
+import '../../../../app/theme/brand_widgets.dart';
 import '../../application/library_providers.dart';
 import '../library_actions.dart';
 
@@ -18,41 +19,62 @@ class LibraryEmptyState extends ConsumerWidget {
     final text = Theme.of(context).textTheme;
     return Center(
       child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(AppTokens.spaceL),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              Icons.video_library_outlined,
-              size: 64,
-              color: Theme.of(context).colorScheme.primary,
+            Container(
+              width: 112,
+              height: 112,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: AppColors.brand,
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.blue.withValues(alpha: 0.45),
+                    blurRadius: 40,
+                  ),
+                ],
+              ),
+              child: const Icon(
+                Icons.play_arrow_rounded,
+                size: 64,
+                color: Colors.white,
+              ),
             ),
-            const SizedBox(height: AppTokens.spaceM),
-            Text(message, style: text.titleMedium, textAlign: TextAlign.center),
+            const SizedBox(height: AppTokens.spaceL),
+            Text(
+              message,
+              style: text.headlineSmall,
+              textAlign: TextAlign.center,
+            ),
             const SizedBox(height: AppTokens.spaceS),
             Text(
-              'Scan finds MP4 videos and MP3 audio on this device and asks for '
-              'media access only then. Or choose individual files. Your media '
-              'stays on this device.',
-              style: text.bodyMedium,
+              'Scan finds MP4 videos and MP3 music on this phone and asks for '
+              'media access only then. Or pick individual files. Your media '
+              'never leaves your device.',
+              style: text.bodyMedium?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: AppTokens.spaceL),
             Wrap(
-              spacing: AppTokens.spaceS,
-              runSpacing: AppTokens.spaceS,
+              spacing: 12,
+              runSpacing: 12,
               alignment: WrapAlignment.center,
               children: [
-                FilledButton.icon(
+                GradientButton(
+                  label: 'Scan library',
+                  icon: Icons.radar_rounded,
                   onPressed: scan.busy
                       ? null
                       : () => LibraryActions.scan(context, ref),
-                  icon: const Icon(Icons.search),
-                  label: const Text('Scan library'),
                 ),
                 OutlinedButton.icon(
                   onPressed: () => LibraryActions.importFiles(context, ref),
-                  icon: const Icon(Icons.folder_open),
+                  icon: const Icon(Icons.folder_open_rounded),
                   label: const Text('Choose files'),
                 ),
               ],

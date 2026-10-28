@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -6,6 +7,7 @@ import '../../../app/providers.dart';
 import '../../../app/router.dart';
 import '../../../core/permissions/media_permissions.dart';
 import '../application/library_providers.dart';
+import '../../../shared/data/app_database.dart';
 import '../data/media_library_repository.dart';
 
 /// Shared user actions for library screens, with snackbar feedback.
@@ -163,5 +165,84 @@ abstract final class LibraryActions {
     messenger.showSnackBar(
       const SnackBar(content: Text('Watch history cleared')),
     );
+  }
+
+  /// Asks how to delete [items] (trash or permanently), lets Android confirm,
+  /// then updates the library and the queue. [what] describes the selection,
+  /// e.g. `"Holiday"` or `the 12 videos in "Camera"`.
+  static Future<void> confirmDelete(
+    BuildContext context,
+    WidgetRef ref,
+    List<LibraryItem> items, {
+    required String what,
+  }) async {
+    if (items.isEmpty) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final repo = ref.read(libraryRepositoryProvider);
+    final trashSupported =
+        await ref.read(mediaStoreProvider).isTrashSupported() &&
+        items.every((i) => i.origin == MediaOrigin.mediaStore);
+    if (!context.mounted) return;
+    final trash = await showModalBottomSheet<bool>(
+      context: context,
+      useRootNavigator: true,
+      showDragHandle: true,
+      builder: (context) {
+        final scheme = Theme.of(context).colorScheme;
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                title: Text('Delete $what?'),
+                subtitle: const Text(
+                  'This deletes the files from your phone, not just from the app.',
+                ),
+              ),
+              if (trashSupported)
+                ListTile(
+                  leading: const Icon(Icons.delete_outline),
+                  title: const Text('Move to trash'),
+                  subtitle: const Text(
+                    'Can be restored from the Files app for about 30 days',
+                  ),
+                  onTap: () => Navigator.pop(context, true),
+                ),
+              ListTile(
+                leading: Icon(Icons.delete_forever, color: scheme.error),
+                title: Text(
+                  'Delete permanently',
+                  style: TextStyle(color: scheme.error),
+                ),
+                subtitle: const Text('Cannot be undone'),
+                onTap: () => Navigator.pop(context, false),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
+    if (trash == null) return;
+    try {
+      final ok = await repo.deleteFiles(items, trash: trash);
+      if (!ok) return; // declined in the system dialog
+      await ref.read(coordinatorProvider).removeMedia({
+        for (final i in items) i.id,
+      });
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            trash
+                ? 'Moved ${items.length == 1 ? 'to' : '${items.length} files to'} trash'
+                : 'Deleted ${items.length == 1 ? '' : '${items.length} files '}permanently',
+          ),
+        ),
+      );
+    } on PlatformException catch (e) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Could not delete: ${e.message ?? e.code}')),
+      );
+    }
   }
 }

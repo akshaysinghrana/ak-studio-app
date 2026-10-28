@@ -15,6 +15,17 @@ abstract interface class MediaStoreGateway {
 
   /// Path of a cached JPEG thumbnail, or null when none can be produced.
   Future<String?> thumbnail(String uri, {int size});
+
+  /// Moves files to the system trash (Android 11+) or deletes them
+  /// permanently. Android asks the user to confirm; returns false when the
+  /// user declines.
+  Future<bool> deleteMedia(List<String> uris, {required bool trash});
+
+  Future<bool> isTrashSupported();
+
+  /// Fires (debounced) when MediaStore content changes, e.g. files deleted
+  /// or added by other apps.
+  Stream<void> changes();
 }
 
 class MethodChannelMediaStore implements MediaStoreGateway {
@@ -58,6 +69,28 @@ class MethodChannelMediaStore implements MediaStoreGateway {
   @override
   Future<String?> thumbnail(String uri, {int size = 256}) =>
       _channel.invokeMethod<String>('thumbnail', {'uri': uri, 'size': size});
+
+  static const _delete = MethodChannel(
+    'com.akshayrana.video_music_app/media_delete',
+  );
+  static const _changes = EventChannel(
+    'com.akshayrana.video_music_app/media_changes',
+  );
+
+  @override
+  Future<bool> deleteMedia(List<String> uris, {required bool trash}) async =>
+      await _delete.invokeMethod<bool>('delete', {
+        'uris': uris,
+        'trash': trash,
+      }) ??
+      false;
+
+  @override
+  Future<bool> isTrashSupported() async =>
+      await _delete.invokeMethod<bool>('isTrashSupported') ?? false;
+
+  @override
+  Stream<void> changes() => _changes.receiveBroadcastStream().map((_) {});
 }
 
 /// System document picker with persistable read grants.

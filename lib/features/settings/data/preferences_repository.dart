@@ -86,4 +86,10 @@ class PreferencesRepository {
 
   Future<void> setGridLayout(bool grid) =>
       _set('library.gridLayout', '$grid', syncEligible: false);
+
+  /// Remembered sort orders per library tab (device-only).
+  Stream<String?> watchSort(String key) => _watch('library.sort.$key');
+
+  Future<void> setSort(String key, String value) =>
+      _set('library.sort.$key', value, syncEligible: false);
 }

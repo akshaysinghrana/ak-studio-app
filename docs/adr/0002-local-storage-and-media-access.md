@@ -67,3 +67,20 @@ Spec 4.1 and 11 require:
 - One native channel owns all MediaStore access. Dart owns identity, reconciliation and persistence.
 - A scan with up to tens of thousands of rows is streamed in pages and written in one transaction per page. List screens query only the rows and columns they render and use lazy builders.
 - iOS needs its own adapter (Photos and Files picker) behind the same Dart interface when the iOS platform is added.
+
+## Changes (2026-10-28)
+
+- **Missing files are hidden** from library views (Videos, Music, folders, Home, counts). Their rows stay in the database with `available = false`, so history and playlists survive and items return automatically if the file reappears. Playlists still list missing entries as unavailable so they can be removed.
+- **Automatic refresh:** a MediaStore `ContentObserver` (debounced 1.5 s), app resume and app start trigger a silent rescan with the permissions already granted. A permission prompt is never shown for this. Files deleted by other apps disappear without a manual scan.
+- **Delete:**
+  - **Move to trash** uses `MediaStore.createTrashRequest` (Android 11+); the file is restorable from the Files app for about 30 days.
+  - **Delete permanently** uses `createDeleteRequest`, or a `RecoverableSecurityException` flow on Android 10.
+  - Imported documents are deleted with `DocumentsContract.deleteDocument`.
+  - Android always shows its own confirmation. The library and queue update only after the user allows it.
+  - Folder delete removes that folder's videos or songs, not other files.
+- **Sorting:**
+  - folders by name, most items, size or recently added;
+  - files by name, date added, date modified, last played, duration or size.
+
+  Sort choices are remembered per tab.
+- **MP3 cover art:** the embedded ID3 picture is read first. Without one, a generated gradient artwork is shown, which is clearly generic, not a fabricated cover.

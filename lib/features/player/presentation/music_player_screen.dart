@@ -1,7 +1,9 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
+
+import 'dart:ui' show ImageFilter;
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:video_player/video_player.dart';
 
@@ -9,6 +11,8 @@ import '../../../app/providers.dart';
 import '../../../app/theme/app_theme.dart';
 import '../../library/application/library_providers.dart';
 import '../../playback/domain/play_queue.dart';
+import '../../playback/domain/media_source.dart';
+import '../../library/presentation/widgets/media_tile.dart';
 import '../../playlists/application/playlist_providers.dart';
 import '../../playback/application/playback_coordinator.dart';
 import 'widgets/player_sheets.dart';
@@ -16,8 +20,9 @@ import 'widgets/queue_sheet.dart';
 import 'widgets/seek_bar.dart';
 import 'widgets/transport_controls.dart';
 
-/// Music Now Playing (spec 6.1): artwork or a neutral placeholder, tag
-/// metadata only when present, seek bar and transport with ±10 s.
+/// Music Now Playing (spec 6.1): blurred artwork backdrop, large artwork
+/// (cover art or generated gradient art), tag metadata only when present,
+/// seek bar, transport with ±10 s, repeat/favourite/shuffle, speed and sleep.
 class MusicPlayerScreen extends ConsumerWidget {
   const MusicPlayerScreen({super.key});
 
@@ -29,71 +34,126 @@ class MusicPlayerScreen extends ConsumerWidget {
       builder: (context, queue, _) {
         final media = queue.current?.media;
         final text = Theme.of(context).textTheme;
+        final scheme = Theme.of(context).colorScheme;
         final subtitle = [media?.artist, media?.album].nonNulls.join(' · ');
+        final art = media == null
+            ? null
+            : ref.watch(thumbnailProvider(media.locator)).value;
         return Scaffold(
+          extendBodyBehindAppBar: true,
           appBar: AppBar(
-            title: const Text('Now playing'),
+            leading: IconButton(
+              tooltip: 'Close',
+              onPressed: () => Navigator.maybePop(context),
+              icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 32),
+            ),
+            title: Text('Now playing', style: text.titleMedium),
+            centerTitle: true,
             actions: [
               IconButton(
                 tooltip: 'Queue',
                 onPressed: () => showQueueSheet(context),
-                icon: const Icon(Icons.queue_music),
+                icon: const Icon(Icons.queue_music_rounded),
               ),
             ],
           ),
           body: media == null
               ? const Center(child: Text('Nothing is playing.'))
-              : SafeArea(
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
-                      final art = (constraints.maxWidth - 64).clamp(
-                        120.0,
-                        360.0,
-                      );
-                      return ListView(
-                        padding: const EdgeInsets.all(AppTokens.spaceL),
-                        children: [
-                          Center(
-                            child: _Artwork(locator: media.locator, size: art),
-                          ),
-                          const SizedBox(height: AppTokens.spaceL),
-                          Text(
-                            media.title,
-                            style: text.headlineSmall,
-                            textAlign: TextAlign.center,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          if (subtitle.isNotEmpty)
-                            Text(
-                              subtitle,
-                              style: text.titleMedium,
-                              textAlign: TextAlign.center,
+              : Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    // Blurred artwork wash behind everything.
+                    ImageFiltered(
+                      imageFilter: ImageFilter.blur(sigmaX: 50, sigmaY: 50),
+                      child: Opacity(
+                        opacity: 0.55,
+                        child: ThumbnailImage(
+                          path: art,
+                          seed: media.title,
+                          kind: media.kind,
+                        ),
+                      ),
+                    ),
+                    DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            scheme.surface.withValues(alpha: 0.35),
+                            scheme.surfaceContainerLowest.withValues(
+                              alpha: 0.95,
                             ),
-                          const SizedBox(height: AppTokens.spaceM),
-                          ValueListenableBuilder<VideoPlayerController?>(
-                            valueListenable: coordinator.controller,
-                            builder: (context, controller, _) =>
-                                controller == null
-                                ? const Center(
-                                    child: CircularProgressIndicator(),
-                                  )
-                                : SeekBar(
-                                    controller: controller,
-                                    onSeek: coordinator.seek,
+                          ],
+                        ),
+                      ),
+                    ),
+                    SafeArea(
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          final size = (constraints.maxWidth - 64).clamp(
+                            140.0,
+                            380.0,
+                          );
+                          return ListView(
+                            padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+                            children: [
+                              Center(
+                                child: _Artwork(
+                                  path: art,
+                                  seed: media.title,
+                                  size: size,
+                                ),
+                              ),
+                              const SizedBox(height: 28),
+                              Text(
+                                media.title,
+                                style: text.headlineSmall?.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                ),
+                                textAlign: TextAlign.center,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              if (subtitle.isNotEmpty)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 4),
+                                  child: Text(
+                                    subtitle,
+                                    style: text.titleSmall?.copyWith(
+                                      color: scheme.primary,
+                                    ),
+                                    textAlign: TextAlign.center,
                                   ),
-                          ),
-                          PlaybackErrorBanner(coordinator: coordinator),
-                          TransportControls(
-                            coordinator: coordinator,
-                            showSeekBar: false,
-                          ),
-                          _ModeRow(mediaId: media.id),
-                          _ExtrasRow(coordinator: coordinator),
-                        ],
-                      );
-                    },
-                  ),
+                                ),
+                              const SizedBox(height: 16),
+                              ValueListenableBuilder<VideoPlayerController?>(
+                                valueListenable: coordinator.controller,
+                                builder: (context, controller, _) =>
+                                    controller == null
+                                    ? const Center(
+                                        child: CircularProgressIndicator(),
+                                      )
+                                    : SeekBar(
+                                        controller: controller,
+                                        onSeek: coordinator.seek,
+                                      ),
+                              ),
+                              PlaybackErrorBanner(coordinator: coordinator),
+                              TransportControls(
+                                coordinator: coordinator,
+                                showSeekBar: false,
+                              ),
+                              const SizedBox(height: 8),
+                              _ModeRow(mediaId: media.id),
+                              const SizedBox(height: 8),
+                              _ExtrasRow(coordinator: coordinator),
+                            ],
+                          );
+                        },
+                      ),
+                    ),
+                  ],
                 ),
         );
       },
@@ -101,37 +161,33 @@ class MusicPlayerScreen extends ConsumerWidget {
   }
 }
 
-class _Artwork extends ConsumerWidget {
-  const _Artwork({required this.locator, required this.size});
+class _Artwork extends StatelessWidget {
+  const _Artwork({required this.path, required this.seed, required this.size});
 
-  final String locator;
+  final String? path;
+  final String seed;
   final double size;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final scheme = Theme.of(context).colorScheme;
-    final path = ref.watch(thumbnailProvider(locator)).value;
-    final placeholder = Icon(
-      Icons.music_note,
-      size: size / 3,
-      color: scheme.onSurfaceVariant,
-    );
+  Widget build(BuildContext context) {
     return Semantics(
       label: path == null ? 'No artwork' : 'Artwork',
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(AppTokens.radiusM),
-        child: SizedBox.square(
-          dimension: size,
-          child: ColoredBox(
-            color: scheme.surfaceContainerHighest,
-            child: path == null
-                ? placeholder
-                : Image.file(
-                    File(path),
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, _, _) => placeholder,
-                  ),
-          ),
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(AppTokens.radiusL),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.blue.withValues(alpha: 0.35),
+              blurRadius: 40,
+              offset: const Offset(0, 16),
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(AppTokens.radiusL),
+          child: ThumbnailImage(path: path, seed: seed, kind: MediaKind.audio),
         ),
       ),
     );

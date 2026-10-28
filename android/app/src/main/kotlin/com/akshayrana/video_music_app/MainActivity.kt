@@ -26,6 +26,8 @@ class MainActivity : AudioServiceActivity() {
 
     private var pipChannel: MethodChannel? = null
     private var documentImporter: DocumentImporter? = null
+    private var mediaDeleter: MediaDeleter? = null
+    private var mediaObserver: android.database.ContentObserver? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -37,6 +39,38 @@ class MainActivity : AudioServiceActivity() {
         documentImporter = DocumentImporter(this).also {
             MethodChannel(messenger, DocumentImporter.CHANNEL).setMethodCallHandler(it)
         }
+        mediaDeleter = MediaDeleter(this).also {
+            MethodChannel(messenger, MediaDeleter.CHANNEL).setMethodCallHandler(it)
+        }
+        // MediaStore changes (files added/deleted by other apps) -> rescan.
+        io.flutter.plugin.common.EventChannel(messenger, "com.akshayrana.video_music_app/media_changes")
+            .setStreamHandler(object : io.flutter.plugin.common.EventChannel.StreamHandler {
+                private val handler = android.os.Handler(android.os.Looper.getMainLooper())
+                private val emit = Runnable { sink?.success(true) }
+                private var sink: io.flutter.plugin.common.EventChannel.EventSink? = null
+
+                override fun onListen(args: Any?, events: io.flutter.plugin.common.EventChannel.EventSink) {
+                    sink = events
+                    mediaObserver = object : android.database.ContentObserver(handler) {
+                        override fun onChange(selfChange: Boolean) {
+                            // Debounce bursts (a copy or delete fires many changes).
+                            handler.removeCallbacks(emit)
+                            handler.postDelayed(emit, 1500)
+                        }
+                    }.also {
+                        contentResolver.registerContentObserver(
+                            android.provider.MediaStore.Files.getContentUri("external"), true, it,
+                        )
+                    }
+                }
+
+                override fun onCancel(args: Any?) {
+                    mediaObserver?.let { contentResolver.unregisterContentObserver(it) }
+                    mediaObserver = null
+                    handler.removeCallbacks(emit)
+                    sink = null
+                }
+            })
         MethodChannel(messenger, SCREEN_CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
                 // Keeps the display on while video plays; cleared otherwise.
@@ -73,6 +107,18 @@ class MainActivity : AudioServiceActivity() {
                         (fraction.coerceIn(0.0, 1.0) * max).roundToInt(),
                         0,
                     )
+                    result.success(null)
+                }
+                // Battery optimisation status; OEM battery savers can stop
+                // background playback even with a media foreground service.
+                "isBatteryUnrestricted" -> {
+                    val pm = getSystemService(POWER_SERVICE) as android.os.PowerManager
+                    result.success(pm.isIgnoringBatteryOptimizations(packageName))
+                }
+                "openBatterySettings" -> {
+                    val intent = Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                        .setData(android.net.Uri.fromParts("package", packageName, null))
+                    startActivity(intent)
                     result.success(null)
                 }
                 "getBrightness" -> {
@@ -118,6 +164,7 @@ class MainActivity : AudioServiceActivity() {
     @Deprecated("Activity result API is unavailable on FlutterActivity")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         if (documentImporter?.onActivityResult(requestCode, resultCode, data) == true) return
+        if (mediaDeleter?.onActivityResult(requestCode, resultCode, data) == true) return
         @Suppress("DEPRECATION")
         super.onActivityResult(requestCode, resultCode, data)
     }

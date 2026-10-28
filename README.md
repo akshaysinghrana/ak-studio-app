@@ -58,4 +58,9 @@ Without that file, release builds are signed with the debug key. Those builds ar
 
 ## Third-party patches
 
-`third_party/audio_service` is a patched copy of `audio_service` 0.18.19 (MIT). Explicit PLAY/PAUSE media keys are made idempotent; see [UMP_PATCH.md](third_party/audio_service/UMP_PATCH.md).
+- `third_party/audio_service`: a patched copy of `audio_service` 0.18.19 (MIT). Explicit PLAY/PAUSE media keys are idempotent. See [UMP_PATCH.md](third_party/audio_service/UMP_PATCH.md).
+- `third_party/video_player_android`: a patched copy of `video_player_android` 2.12.2 (BSD-3). It adds an audio-only mode for background video audio. See [UMP_PATCH.md](third_party/video_player_android/UMP_PATCH.md).
+
+## Branding
+
+AS Media, created by Akshay Studio. The icon source and generator are in `branding/`. The typeface is Poppins (OFL), bundled in `assets/fonts/`.

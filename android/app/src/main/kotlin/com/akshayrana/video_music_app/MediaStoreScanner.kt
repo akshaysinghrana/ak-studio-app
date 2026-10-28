@@ -210,8 +210,11 @@ class MediaStoreScanner(private val context: Context) : MethodChannel.MethodCall
         val dir = File(context.cacheDir, "thumbnails").apply { mkdirs() }
         val out = File(dir, "${uri.toString().hashCode().toUInt()}_$size.jpg")
         if (out.exists()) return out.absolutePath
+        val isAudio = uri.toString().contains("/audio/") ||
+            resolver.getType(uri)?.startsWith("audio/") == true
         val bitmap: Bitmap? = try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            // MP3 cover art: the embedded picture (ID3 APIC), when present.
+            (if (isAudio) embeddedArt(uri, size) else null) ?: if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 resolver.loadThumbnail(uri, Size(size, size), null)
             } else {
                 val retriever = MediaMetadataRetriever()
@@ -231,6 +234,26 @@ class MediaStoreScanner(private val context: Context) : MethodChannel.MethodCall
         FileOutputStream(out).use { bitmap.compress(Bitmap.CompressFormat.JPEG, 85, it) }
         bitmap.recycle()
         return out.absolutePath
+    }
+
+    private fun embeddedArt(uri: Uri, size: Int): Bitmap? {
+        val retriever = MediaMetadataRetriever()
+        return try {
+            retriever.setDataSource(context, uri)
+            val bytes = retriever.embeddedPicture ?: return null
+            val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+            var sample = 1
+            while (bounds.outWidth / (sample * 2) >= size && bounds.outHeight / (sample * 2) >= size) sample *= 2
+            android.graphics.BitmapFactory.decodeByteArray(
+                bytes, 0, bytes.size,
+                android.graphics.BitmapFactory.Options().apply { inSampleSize = sample },
+            )
+        } catch (e: RuntimeException) {
+            null
+        } finally {
+            retriever.release()
+        }
     }
 
     private fun Cursor.stringOrNull(column: String): String? {

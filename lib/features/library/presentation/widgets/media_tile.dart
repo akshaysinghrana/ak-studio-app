@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../app/providers.dart';
 import '../../../../app/theme/app_theme.dart';
+import '../../../../app/theme/brand_widgets.dart';
 import '../../../player/presentation/widgets/transport_controls.dart';
 import '../../../playback/domain/media_source.dart';
 import '../../../playlists/application/playlist_providers.dart';
@@ -39,6 +40,7 @@ enum _Action {
   removeFromHistory,
   rescan,
   remove,
+  delete,
 }
 
 /// "More options" menu shared by list rows and grid cards.
@@ -98,6 +100,14 @@ class MediaActionsButton extends ConsumerWidget {
           value: _Action.remove,
           child: Text('Remove from library'),
         ),
+        if (item.available)
+          PopupMenuItem(
+            value: _Action.delete,
+            child: Text(
+              'Delete…',
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+          ),
       ],
     );
   }
@@ -140,6 +150,10 @@ class MediaActionsButton extends ConsumerWidget {
         await LibraryActions.scan(context, ref);
       case _Action.remove:
         await LibraryActions.confirmRemove(context, ref, entry);
+      case _Action.delete:
+        await LibraryActions.confirmDelete(context, ref, [
+          entry.item,
+        ], what: '"$title"');
     }
   }
 }
@@ -245,6 +259,10 @@ class MediaCard extends ConsumerWidget {
     final card = Card(
       clipBehavior: Clip.antiAlias,
       margin: EdgeInsets.zero,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppTokens.radiusM),
+        side: BorderSide(color: scheme.outlineVariant),
+      ),
       child: InkWell(
         onTap: item.available ? onTap : null,
         child: Column(
@@ -256,14 +274,24 @@ class MediaCard extends ConsumerWidget {
                 fit: StackFit.expand,
                 children: [
                   MediaThumbnail(entry: entry, fill: true),
+                  const DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [Colors.transparent, Color(0x99000000)],
+                        stops: [0.55, 1],
+                      ),
+                    ),
+                  ),
                   if (item.durationMs != null)
                     Positioned(
                       right: 6,
                       bottom: 8,
                       child: DecoratedBox(
                         decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.7),
-                          borderRadius: BorderRadius.circular(4),
+                          color: Colors.black.withValues(alpha: 0.65),
+                          borderRadius: BorderRadius.circular(6),
                         ),
                         child: Padding(
                           padding: const EdgeInsets.symmetric(
@@ -337,8 +365,9 @@ class MediaCard extends ConsumerWidget {
   }
 }
 
-/// Lazily loaded thumbnail that fades in; a neutral icon when none exists
-/// (never invented artwork).
+/// Lazily loaded thumbnail (video frame or MP3 cover art) that fades in.
+/// Without one, a generated gradient artwork is shown (never a fabricated
+/// album cover).
 class MediaThumbnail extends ConsumerWidget {
   const MediaThumbnail({super.key, required this.entry, this.fill = false});
 
@@ -349,17 +378,15 @@ class MediaThumbnail extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isVideo = entry.item.kind == MediaKind.video;
-    final path = entry.item.available
-        ? ref.watch(thumbnailProvider(entry.item.locator)).value
+    final item = entry.item;
+    final isVideo = item.kind == MediaKind.video;
+    final path = item.available
+        ? ref.watch(thumbnailProvider(item.locator)).value
         : null;
-    final image = ThumbnailImage(
-      path: path,
-      icon: isVideo ? Icons.movie_outlined : Icons.music_note,
-    );
+    final image = ThumbnailImage(path: path, seed: item.title, kind: item.kind);
     if (fill) return image;
     return ClipRRect(
-      borderRadius: BorderRadius.circular(AppTokens.spaceS),
+      borderRadius: BorderRadius.circular(AppTokens.radiusS),
       child: SizedBox(
         width: isVideo ? AppTokens.thumbnailWidth : 56.0,
         height: isVideo ? AppTokens.thumbnailWidth * 9 / 16 : 56.0,
@@ -370,33 +397,38 @@ class MediaThumbnail extends ConsumerWidget {
 }
 
 class ThumbnailImage extends StatelessWidget {
-  const ThumbnailImage({super.key, required this.path, required this.icon});
+  const ThumbnailImage({
+    super.key,
+    required this.path,
+    required this.seed,
+    required this.kind,
+  });
 
   final String? path;
-  final IconData icon;
+  final String seed;
+  final MediaKind kind;
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final placeholder = Center(
-      child: Icon(icon, color: scheme.onSurfaceVariant),
-    );
-    return ColoredBox(
-      color: scheme.surfaceContainerHighest,
-      child: path == null
-          ? placeholder
-          : Image.file(
-              File(path!),
-              fit: BoxFit.cover,
-              cacheWidth: 384,
-              errorBuilder: (_, _, _) => placeholder,
-              frameBuilder: (context, child, frame, sync) => sync
-                  ? child
-                  : AnimatedOpacity(
-                      opacity: frame == null ? 0 : 1,
-                      duration: const Duration(milliseconds: 250),
-                      child: child,
-                    ),
+    final placeholder = GeneratedArtwork(seed: seed, kind: kind);
+    if (path == null) return placeholder;
+    return Image.file(
+      File(path!),
+      fit: BoxFit.cover,
+      cacheWidth: 384,
+      errorBuilder: (_, _, _) => placeholder,
+      frameBuilder: (context, child, frame, sync) => sync
+          ? child
+          : Stack(
+              fit: StackFit.expand,
+              children: [
+                placeholder,
+                AnimatedOpacity(
+                  opacity: frame == null ? 0 : 1,
+                  duration: const Duration(milliseconds: 250),
+                  child: child,
+                ),
+              ],
             ),
     );
   }

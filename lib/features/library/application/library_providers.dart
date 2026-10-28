@@ -95,6 +95,29 @@ class ScanController extends Notifier<ScanState> {
   @override
   ScanState build() => const ScanState();
 
+  /// Rescans quietly with the permissions already granted (no prompt), e.g.
+  /// after files change outside the app or when the app returns. Keeps the
+  /// library free of files deleted elsewhere.
+  Future<void> refreshSilently() async {
+    if (state.busy) return;
+    final permissions = ref.read(mediaPermissionsProvider);
+    final kinds = <MediaKind>{};
+    for (final kind in MediaKind.values) {
+      final a = await permissions.status(kind);
+      if (a == MediaAccess.granted || a == MediaAccess.limited) kinds.add(kind);
+    }
+    final repo = ref.read(libraryRepositoryProvider);
+    if (kinds.isEmpty) {
+      await repo.refreshImportedAccess();
+      return;
+    }
+    try {
+      await repo.scanMediaStore(kinds);
+    } on Exception {
+      // Background refresh is best-effort; a manual scan reports errors.
+    }
+  }
+
   Future<void> scan() async {
     if (state.busy) return;
     state = const ScanState(status: ScanStatus.requestingPermission);
@@ -135,4 +158,24 @@ class ScanController extends Notifier<ScanState> {
 
 final scanControllerProvider = NotifierProvider<ScanController, ScanState>(
   ScanController.new,
+);
+
+final librarySortProvider = StreamProvider.autoDispose
+    .family<LibrarySort, String>(
+      (ref, key) => ref
+          .watch(preferencesProvider)
+          .watchSort(key)
+          .map((v) => LibrarySort.values.asNameMap()[v] ?? LibrarySort.title),
+    );
+
+final folderSortProvider = StreamProvider.autoDispose
+    .family<FolderSort, MediaKind>(
+      (ref, kind) => ref
+          .watch(preferencesProvider)
+          .watchSort('${kind.name}.folders')
+          .map((v) => FolderSort.values.asNameMap()[v] ?? FolderSort.name),
+    );
+
+final kindCountsProvider = StreamProvider.autoDispose<Map<MediaKind, int>>(
+  (ref) => ref.watch(libraryRepositoryProvider).watchKindCounts(),
 );

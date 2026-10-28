@@ -9,6 +9,33 @@ import '../domain/media_record.dart';
 
 enum LibrarySort { title, dateAdded, dateModified, duration, size, lastPlayed }
 
+enum FolderSort { name, itemCount, size, recent }
+
+/// Sorts folders in memory (folder lists are small).
+List<FolderSummary> sortFolders(List<FolderSummary> folders, FolderSort sort) {
+  final list = [...folders];
+  int byName(FolderSummary a, FolderSummary b) =>
+      a.name.toLowerCase().compareTo(b.name.toLowerCase());
+  list.sort(switch (sort) {
+    FolderSort.name => byName,
+    FolderSort.itemCount => (a, b) {
+      final c = b.count.compareTo(a.count);
+      return c != 0 ? c : byName(a, b);
+    },
+    FolderSort.size => (a, b) {
+      final c = b.totalBytes.compareTo(a.totalBytes);
+      return c != 0 ? c : byName(a, b);
+    },
+    FolderSort.recent => (a, b) {
+      final c = (b.latestAddedAt ?? DateTime(0)).compareTo(
+        a.latestAddedAt ?? DateTime(0),
+      );
+      return c != 0 ? c : byName(a, b);
+    },
+  });
+  return list;
+}
+
 /// A library item with its playback progress, if any.
 class LibraryEntry {
   const LibraryEntry(this.item, this.progress);
@@ -35,6 +62,7 @@ class FolderSummary {
     required this.totalBytes,
     required this.hidden,
     this.sampleLocator,
+    this.latestAddedAt,
   });
 
   final String? folder;
@@ -44,6 +72,9 @@ class FolderSummary {
 
   /// Any item in the folder, for a thumbnail.
   final String? sampleLocator;
+
+  /// Newest item's date added, for "Recently added" folder sorting.
+  final DateTime? latestAddedAt;
 
   /// Last path segment, e.g. `Camera` for `DCIM/Camera/`.
   String get name {
@@ -117,8 +148,9 @@ class MediaLibraryRepository {
     String search = '',
     String? folder,
   }) {
+    // Missing files are not listed (playlists still show them, marked).
     final query = (folder == null ? _visible() : _joined())
-      ..where(_items.kind.equalsValue(kind));
+      ..where(_items.kind.equalsValue(kind) & _items.available.equals(true));
     if (folder == noFolder) {
       query.where(_items.folder.isNull());
     } else if (folder != null) {
@@ -162,12 +194,20 @@ class MediaLibraryRepository {
     final count = _items.id.count();
     final bytes = _items.sizeBytes.sum();
     final sample = _items.locator.max();
+    final latest = _items.addedAt.max();
     final query =
         _db.selectOnly(_items).join([
             leftOuterJoin(_hidden, _hidden.folder.equalsExp(_items.folder)),
           ])
-          ..addColumns([_items.folder, _hidden.folder, count, bytes, sample])
-          ..where(_items.kind.equalsValue(kind))
+          ..addColumns([
+            _items.folder,
+            _hidden.folder,
+            count,
+            bytes,
+            sample,
+            latest,
+          ])
+          ..where(_items.kind.equalsValue(kind) & _items.available.equals(true))
           ..groupBy([_items.folder])
           ..orderBy([OrderingTerm.asc(_items.folder.collate(Collate.noCase))]);
     return query.watch().map(
@@ -179,6 +219,7 @@ class MediaLibraryRepository {
             totalBytes: r.read(bytes) ?? 0,
             hidden: r.read(_hidden.folder) != null,
             sampleLocator: r.read(sample),
+            latestAddedAt: r.read(latest),
           ),
       ],
     );
@@ -209,9 +250,31 @@ class MediaLibraryRepository {
   Future<void> removeFromHistory(String mediaId) =>
       (_db.delete(_progress)..where((t) => t.mediaId.equals(mediaId))).go();
 
+  /// Visible (available, not hidden) item counts per kind.
+  Stream<Map<MediaKind, int>> watchKindCounts() {
+    final count = _items.id.count();
+    final query =
+        _db.selectOnly(_items).join([
+            leftOuterJoin(_hidden, _hidden.folder.equalsExp(_items.folder)),
+          ])
+          ..addColumns([_items.kind, count])
+          ..where(_items.available.equals(true) & _hidden.folder.isNull())
+          ..groupBy([_items.kind]);
+    return query.watch().map(
+      (rows) => {
+        for (final kind in MediaKind.values) kind: 0,
+        for (final r in rows)
+          _items.kind.converter.fromSql(r.read(_items.kind)!):
+              r.read(count) ?? 0,
+      },
+    );
+  }
+
   Stream<int> watchCount() {
     final count = _items.id.count();
-    final query = _db.selectOnly(_items)..addColumns([count]);
+    final query = _db.selectOnly(_items)
+      ..addColumns([count])
+      ..where(_items.available.equals(true));
     return query.watchSingle().map((row) => row.read(count) ?? 0);
   }
 
@@ -323,6 +386,35 @@ class MediaLibraryRepository {
     }
     if (!present) await markUnavailable(id);
   }
+
+  /// Moves items to the system trash or deletes them permanently, then
+  /// removes them from the library (with progress, playlist entries and
+  /// favourites). Returns false when the user declined the system prompt.
+  Future<bool> deleteFiles(
+    List<LibraryItem> items, {
+    required bool trash,
+  }) async {
+    if (items.isEmpty) return true;
+    final ok = await _store.deleteMedia([
+      for (final i in items) i.locator,
+    ], trash: trash);
+    if (!ok) return false;
+    final ids = [for (final i in items) i.id];
+    await (_db.delete(_items)..where((t) => t.id.isIn(ids))).go();
+    for (final i in items.where((i) => i.origin == MediaOrigin.imported)) {
+      await _importer.release(i.locator);
+    }
+    return true;
+  }
+
+  /// Items of [kind] in one folder (for deleting a whole folder).
+  Future<List<LibraryItem>> itemsInFolder(MediaKind kind, String? folder) =>
+      (_db.select(_items)..where(
+            (t) =>
+                t.kind.equalsValue(kind) &
+                (folder == null ? t.folder.isNull() : t.folder.equals(folder)),
+          ))
+          .get();
 
   /// Marks an item as missing or inaccessible.
   Future<void> markUnavailable(String id) =>

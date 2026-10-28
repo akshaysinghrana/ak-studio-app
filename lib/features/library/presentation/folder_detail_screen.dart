@@ -8,6 +8,7 @@ import '../data/media_library_repository.dart';
 import 'library_actions.dart';
 import 'widgets/folder_tile.dart';
 import 'widgets/media_collection.dart';
+import 'widgets/sort_menus.dart';
 
 /// Items in one folder (spec 3: folder grouping). Works for hidden folders
 /// too, so their contents stay reachable from Hidden folders.
@@ -23,10 +24,12 @@ class FolderDetailScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final sort =
+        ref.watch(librarySortProvider(kind.name)).value ?? LibrarySort.title;
     final entries = ref.watch(
       libraryProvider((
         kind: kind,
-        sort: LibrarySort.title,
+        sort: sort,
         search: '',
         folder: folder.folder ?? MediaLibraryRepository.noFolder,
       )),
@@ -38,6 +41,7 @@ class FolderDetailScreen extends ConsumerWidget {
       appBar: AppBar(
         title: Text(folder.name),
         actions: [
+          FileSortButton(prefKey: kind.name, value: sort),
           if (kind == MediaKind.video) GridToggleButton(grid: grid),
           if (folder.folder != null)
             IconButton(
@@ -53,6 +57,11 @@ class FolderDetailScreen extends ConsumerWidget {
                 hidden ? Icons.visibility : Icons.visibility_off_outlined,
               ),
             ),
+          IconButton(
+            tooltip: 'Delete folder',
+            onPressed: () => deleteFolder(context, ref, folder, kind),
+            icon: const Icon(Icons.delete_outline_rounded),
+          ),
         ],
       ),
       body: entries.when(

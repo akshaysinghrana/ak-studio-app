@@ -5,17 +5,23 @@ import 'package:go_router/go_router.dart';
 
 import '../../../app/providers.dart';
 import '../../../app/router.dart';
+import '../../../app/theme/app_theme.dart';
+import '../../../app/theme/brand_widgets.dart';
 import '../../../core/permissions/media_permissions.dart';
+import '../../../core/platform/screen_control.dart';
 import '../../library/application/library_providers.dart';
 import '../../library/presentation/hidden_folders_screen.dart';
 import '../../library/presentation/library_actions.dart';
 import '../../player/domain/subtitles.dart';
-import 'privacy_screen.dart';
-import '../../player/presentation/widgets/background_audio_switch.dart';
 import '../../playback/domain/media_source.dart';
+import 'about_screen.dart';
+import 'privacy_screen.dart';
 
-/// Settings (spec 4.6). Account and sync arrive in Phase 6; until then no
-/// account controls are shown.
+final batteryUnrestrictedProvider = FutureProvider.autoDispose<bool>(
+  (ref) => const ScreenControl().isBatteryUnrestricted(),
+);
+
+/// Settings (spec 4.6), grouped into cards.
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
 
@@ -29,9 +35,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   @override
   void initState() {
     super.initState();
-    // Re-read permission status when returning from system settings.
+    // Re-read permission and battery status when returning from system
+    // settings.
     _lifecycle = AppLifecycleListener(
-      onResume: () => ref.invalidate(mediaAccessProvider),
+      onResume: () {
+        ref.invalidate(mediaAccessProvider);
+        ref.invalidate(batteryUnrestrictedProvider);
+      },
     );
   }
 
@@ -47,171 +57,260 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final themeMode = ref.watch(themeModeProvider).value ?? ThemeMode.dark;
     final access = ref.watch(mediaAccessProvider).value;
     final scanBusy = ref.watch(scanControllerProvider).busy;
+    final unrestricted = ref.watch(batteryUnrestrictedProvider).value ?? true;
+    final auth = ref.watch(authRepositoryProvider);
+    final user = ref.watch(authStateProvider).value;
+    final prefs = ref.read(preferencesProvider);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
       body: ListView(
+        padding: const EdgeInsets.only(bottom: 120),
         children: [
-          const _Header('Account'),
-          Consumer(
-            builder: (context, ref, _) {
-              final auth = ref.watch(authRepositoryProvider);
-              final user = ref.watch(authStateProvider).value;
-              return ListTile(
-                leading: const Icon(Icons.account_circle_outlined),
-                title: Text(user?.email ?? 'Guest'),
-                subtitle: Text(
-                  !auth.isConfigured
-                      ? 'Accounts are not set up in this build'
-                      : user == null
-                      ? 'Sign in to sync playlists, favourites and settings'
-                      : 'Account and sync',
-                ),
-                trailing: const Icon(Icons.chevron_right),
+          _Group(
+            title: 'Account',
+            children: [
+              _Item(
+                icon: Icons.person_rounded,
+                colors: AppColors.accents[1],
+                title: user?.email ?? 'Guest',
+                subtitle: !auth.isConfigured
+                    ? 'Accounts are not set up in this build'
+                    : user == null
+                    ? 'Sign in to sync playlists, favourites and settings'
+                    : 'Account and sync',
                 onTap: () => context.push(Routes.account),
-              );
-            },
+              ),
+            ],
           ),
-          const _Header('Playback'),
-          BackgroundAudioSwitch(coordinator: coordinator),
-          const ListTile(
-            title: Text('Seek step'),
-            subtitle: Text('Rewind and forward move 10 seconds.'),
-          ),
-          SwitchListTile(
-            title: const Text('Brightness gesture'),
-            subtitle: const Text(
-              'Swipe up or down on the left half of a video. Changes only '
-              'this app\'s brightness while the player is open.',
-            ),
-            value: ref.watch(brightnessGestureProvider).value ?? false,
-            onChanged: (v) =>
-                ref.read(preferencesProvider).setBrightnessGesture(v),
-          ),
-          SwitchListTile(
-            title: const Text('Volume gesture'),
-            subtitle: const Text(
-              'Swipe up or down on the right half of a video to change '
-              'media volume.',
-            ),
-            value: ref.watch(volumeGestureProvider).value ?? false,
-            onChanged: (v) => ref.read(preferencesProvider).setVolumeGesture(v),
-          ),
-          ListTile(
-            title: const Text('Subtitle size'),
-            trailing: DropdownButton<SubtitleSize>(
-              value:
-                  ref.watch(subtitleSizeProvider).value ?? SubtitleSize.medium,
-              onChanged: (v) {
-                if (v != null) ref.read(preferencesProvider).setSubtitleSize(v);
-              },
-              items: const [
-                DropdownMenuItem(
-                  value: SubtitleSize.small,
-                  child: Text('Small'),
+          _Group(
+            title: 'Playback',
+            children: [
+              ValueListenableBuilder<bool>(
+                valueListenable: coordinator.continueVideoAudioInBackground,
+                builder: (context, on, _) => _SwitchItem(
+                  icon: Icons.headphones_rounded,
+                  colors: AppColors.accents[0],
+                  title: 'Continue video audio in background',
+                  subtitle:
+                      'Keeps a video\'s sound playing when the app is in the '
+                      'background or the phone is locked. The picture is not '
+                      'shown on the lock screen.',
+                  value: on,
+                  onChanged: (v) =>
+                      coordinator.continueVideoAudioInBackground.value = v,
                 ),
-                DropdownMenuItem(
-                  value: SubtitleSize.medium,
-                  child: Text('Medium'),
+              ),
+              _Item(
+                icon: unrestricted
+                    ? Icons.battery_full_rounded
+                    : Icons.battery_alert_rounded,
+                colors: unrestricted
+                    ? AppColors.accents[3]
+                    : AppColors.accents[4],
+                title: 'Background playback',
+                subtitle: unrestricted
+                    ? 'Battery use is unrestricted: playback can keep running '
+                          'with the screen locked.'
+                    : 'Battery optimisation may stop playback in the '
+                          'background on some phones. Tap, then choose '
+                          'Battery → Unrestricted.',
+                onTap: () => const ScreenControl().openBatterySettings(),
+              ),
+              const _Item(
+                icon: Icons.fast_forward_rounded,
+                title: 'Seek step',
+                subtitle:
+                    'Double-tap left/right or the ±10 buttons move 10 '
+                    'seconds.',
+              ),
+              _SwitchItem(
+                icon: Icons.brightness_6_rounded,
+                colors: AppColors.accents[4],
+                title: 'Brightness gesture',
+                subtitle: 'Swipe up/down on the left half of a video.',
+                value: ref.watch(brightnessGestureProvider).value ?? false,
+                onChanged: prefs.setBrightnessGesture,
+              ),
+              _SwitchItem(
+                icon: Icons.volume_up_rounded,
+                colors: AppColors.accents[5],
+                title: 'Volume gesture',
+                subtitle: 'Swipe up/down on the right half of a video.',
+                value: ref.watch(volumeGestureProvider).value ?? false,
+                onChanged: prefs.setVolumeGesture,
+              ),
+              _Item(
+                icon: Icons.subtitles_rounded,
+                colors: AppColors.accents[2],
+                title: 'Subtitle size',
+                trailing: DropdownButton<SubtitleSize>(
+                  value:
+                      ref.watch(subtitleSizeProvider).value ??
+                      SubtitleSize.medium,
+                  underline: const SizedBox.shrink(),
+                  borderRadius: BorderRadius.circular(AppTokens.radiusS),
+                  onChanged: (v) {
+                    if (v != null) prefs.setSubtitleSize(v);
+                  },
+                  items: const [
+                    DropdownMenuItem(
+                      value: SubtitleSize.small,
+                      child: Text('Small'),
+                    ),
+                    DropdownMenuItem(
+                      value: SubtitleSize.medium,
+                      child: Text('Medium'),
+                    ),
+                    DropdownMenuItem(
+                      value: SubtitleSize.large,
+                      child: Text('Large'),
+                    ),
+                  ],
                 ),
-                DropdownMenuItem(
-                  value: SubtitleSize.large,
-                  child: Text('Large'),
+              ),
+            ],
+          ),
+          _Group(
+            title: 'Appearance',
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: SegmentedButton<ThemeMode>(
+                    segments: const [
+                      ButtonSegment(
+                        value: ThemeMode.dark,
+                        icon: Icon(Icons.dark_mode_rounded),
+                        label: Text('Dark'),
+                      ),
+                      ButtonSegment(
+                        value: ThemeMode.light,
+                        icon: Icon(Icons.light_mode_rounded),
+                        label: Text('Light'),
+                      ),
+                      ButtonSegment(
+                        value: ThemeMode.system,
+                        icon: Icon(Icons.brightness_auto_rounded),
+                        label: Text('System'),
+                      ),
+                    ],
+                    selected: {themeMode},
+                    onSelectionChanged: (s) => prefs.setThemeMode(s.single),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          _Group(
+            title: 'Library',
+            children: [
+              _Item(
+                icon: Icons.radar_rounded,
+                title: 'Scan library',
+                subtitle: 'Find MP4 and MP3 files on this phone. Nothing is uploaded.',
+                onTap: scanBusy
+                    ? null
+                    : () => LibraryActions.scan(context, ref),
+              ),
+              _Item(
+                icon: Icons.folder_open_rounded,
+                colors: AppColors.accents[5],
+                title: 'Choose files',
+                subtitle: 'Add individual files with the system picker.',
+                onTap: () => LibraryActions.importFiles(context, ref),
+              ),
+              _Item(
+                icon: Icons.visibility_off_rounded,
+                colors: AppColors.accents[1],
+                title: 'Hidden folders',
+                subtitle:
+                    '${ref.watch(hiddenFoldersProvider).value?.length ?? 0} hidden',
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const HiddenFoldersScreen(),
+                  ),
+                ),
+              ),
+              _Item(
+                icon: Icons.history_rounded,
+                colors: AppColors.accents[4],
+                title: 'Clear watch history',
+                subtitle: 'Continue list and resume positions',
+                onTap: () => LibraryActions.confirmClearHistory(context, ref),
+              ),
+              _Item(
+                icon: Icons.lock_rounded,
+                colors: AppColors.accents[3],
+                title: 'Media access',
+                subtitle: access == null
+                    ? 'Checking…'
+                    : 'Videos: ${_label(access[MediaKind.video]!)} · '
+                          'Audio: ${_label(access[MediaKind.audio]!)}',
+                onTap: () => ref.read(mediaPermissionsProvider).openSettings(),
+              ),
+            ],
+          ),
+          _Group(
+            title: 'About',
+            children: [
+              _Item(
+                leading: const AppLogo(size: 40),
+                title: 'About AS Media',
+                subtitle: 'Created by Akshay Studio',
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(builder: (_) => const AboutScreen()),
+                ),
+              ),
+              _Item(
+                icon: Icons.privacy_tip_rounded,
+                colors: AppColors.accents[3],
+                title: 'Privacy',
+                subtitle: 'What stays on this device and what syncs',
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const PrivacyScreen(),
+                  ),
+                ),
+              ),
+              _Item(
+                icon: Icons.description_rounded,
+                colors: AppColors.accents[5],
+                title: 'Open-source licences',
+                onTap: () => showLicensePage(
+                  context: context,
+                  applicationName: 'AS Media',
+                  applicationLegalese: '© 2026 Akshay Studio',
+                  applicationIcon: const Padding(
+                    padding: EdgeInsets.all(12),
+                    child: AppLogo(size: 64),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (kDebugMode)
+            _Group(
+              title: 'Developer',
+              children: [
+                _Item(
+                  icon: Icons.bug_report_rounded,
+                  colors: AppColors.accents[2],
+                  title: 'Engine test screen',
+                  onTap: () => context.push(Routes.debugEngine),
                 ),
               ],
             ),
-          ),
-          const _Header('Appearance'),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: SegmentedButton<ThemeMode>(
-              segments: const [
-                ButtonSegment(value: ThemeMode.dark, label: Text('Dark')),
-                ButtonSegment(value: ThemeMode.light, label: Text('Light')),
-                ButtonSegment(value: ThemeMode.system, label: Text('System')),
-              ],
-              selected: {themeMode},
-              onSelectionChanged: (s) =>
-                  ref.read(preferencesProvider).setThemeMode(s.single),
-            ),
-          ),
-          const _Header('Library'),
-          ListTile(
-            leading: const Icon(Icons.search),
-            title: const Text('Scan library'),
-            subtitle: const Text(
-              'Find MP4 and MP3 files on this device. Files are not uploaded.',
-            ),
-            enabled: !scanBusy,
-            onTap: () => LibraryActions.scan(context, ref),
-          ),
-          ListTile(
-            leading: const Icon(Icons.folder_open),
-            title: const Text('Choose files'),
-            subtitle: const Text(
-              'Add individual files with the system picker.',
-            ),
-            onTap: () => LibraryActions.importFiles(context, ref),
-          ),
-          ListTile(
-            leading: const Icon(Icons.visibility_off_outlined),
-            title: const Text('Hidden folders'),
-            subtitle: Text(
-              '${ref.watch(hiddenFoldersProvider).value?.length ?? 0} hidden',
-            ),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => const HiddenFoldersScreen(),
+          const SizedBox(height: 8),
+          Center(
+            child: Text(
+              'AS Media · Created by Akshay Studio',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
             ),
           ),
-          ListTile(
-            leading: const Icon(Icons.history),
-            title: const Text('Clear watch history'),
-            subtitle: const Text('Continue list and resume positions'),
-            onTap: () => LibraryActions.confirmClearHistory(context, ref),
-          ),
-          ListTile(
-            leading: const Icon(Icons.lock_outline),
-            title: const Text('Media access'),
-            subtitle: Text(
-              access == null
-                  ? 'Checking…'
-                  : 'Videos: ${_label(access[MediaKind.video]!)} · '
-                        'Audio: ${_label(access[MediaKind.audio]!)}',
-            ),
-            trailing: TextButton(
-              onPressed: () =>
-                  ref.read(mediaPermissionsProvider).openSettings(),
-              child: const Text('System settings'),
-            ),
-          ),
-          const _Header('About'),
-          ListTile(
-            leading: const Icon(Icons.privacy_tip_outlined),
-            title: const Text('Privacy'),
-            subtitle: const Text('What stays on this device and what syncs'),
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(builder: (_) => const PrivacyScreen()),
-            ),
-          ),
-          ListTile(
-            leading: const Icon(Icons.description_outlined),
-            title: const Text('Open-source licences'),
-            onTap: () => showLicensePage(
-              context: context,
-              applicationName: 'AS Media',
-            ),
-          ),
-          if (kDebugMode) ...[
-            const _Header('Developer'),
-            ListTile(
-              leading: const Icon(Icons.bug_report_outlined),
-              title: const Text('Engine test screen'),
-              onTap: () => context.push(Routes.debugEngine),
-            ),
-          ],
         ],
       ),
     );
@@ -225,21 +324,88 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   };
 }
 
-class _Header extends StatelessWidget {
-  const _Header(this.text);
+class _Group extends StatelessWidget {
+  const _Group({required this.title, required this.children});
 
-  final String text;
+  final String title;
+  final List<Widget> children;
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
-    child: Semantics(
-      header: true,
-      child: Text(
-        text,
-        style: Theme.of(context).textTheme.labelLarge
-            ?.copyWith(color: Theme.of(context).colorScheme.primary),
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      SectionHeader(title, padding: const EdgeInsets.fromLTRB(20, 18, 8, 8)),
+      GlassCard(
+        margin: const EdgeInsets.symmetric(horizontal: 16),
+        child: Column(
+          children: [
+            for (final (i, c) in children.indexed) ...[
+              if (i > 0) const Divider(indent: 68),
+              c,
+            ],
+          ],
+        ),
       ),
-    ),
+    ],
+  );
+}
+
+class _Item extends StatelessWidget {
+  const _Item({
+    this.icon,
+    this.leading,
+    this.colors = const [AppColors.blueDeep, AppColors.cyan],
+    required this.title,
+    this.subtitle,
+    this.trailing,
+    this.onTap,
+  });
+
+  final IconData? icon;
+  final Widget? leading;
+  final List<Color> colors;
+  final String title;
+  final String? subtitle;
+  final Widget? trailing;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) => ListTile(
+    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+    leading: leading ?? IconBadge(icon: icon!, colors: colors, size: 38),
+    title: Text(title),
+    subtitle: subtitle == null ? null : Text(subtitle!),
+    trailing:
+        trailing ??
+        (onTap == null ? null : const Icon(Icons.chevron_right_rounded)),
+    onTap: onTap,
+  );
+}
+
+class _SwitchItem extends StatelessWidget {
+  const _SwitchItem({
+    required this.icon,
+    required this.colors,
+    required this.title,
+    required this.subtitle,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final IconData icon;
+  final List<Color> colors;
+  final String title;
+  final String subtitle;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) => SwitchListTile(
+    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+    secondary: IconBadge(icon: icon, colors: colors, size: 38),
+    title: Text(title),
+    subtitle: Text(subtitle),
+    value: value,
+    onChanged: onChanged,
   );
 }

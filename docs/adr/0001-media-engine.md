@@ -97,3 +97,15 @@ Full results: `docs/testing/phase1-device-results.md`. The device was a Motorola
 | Brightness and volume gestures | Window brightness override (restored when the player closes) and `AudioManager` music stream | **Off by default.** Active only at 1× zoom and with controls unlocked, so pinch and pan are unaffected |
 | Rotation lock | `SystemChrome.setPreferredOrientations` | |
 | Equalizer | **Not offered** | The engine does not expose its audio session ID, so a real `android.media.audiofx.Equalizer` cannot be attached. Per the spec, no control is shown |
+
+## Background reliability fixes (2026-10-28)
+
+Reported on the Motorola: background audio stopped after about 5 minutes, sooner on later attempts, and lock-screen controls went missing.
+
+- **Stock Android is fine.** On the API 37 emulator, after 8 minutes of forced Doze with the battery unplugged, the foreground service stayed alive, the ExoPlayer and AudioService wake locks were held, and the audio track was still "started".
+- **Video in background releases its decoder.** Background video audio used to keep the hardware video decoder running with no surface. Android can reclaim decoders from background apps, which stops playback. `third_party/video_player_android` (see UMP_PATCH.md) adds an audio-only switch. The coordinator enables it while a video's audio plays in the background and disables it on return. Verified on the emulator:
+  - background: 0 video decoders, audio playing;
+  - foreground again: decoder restored and picture in sync.
+- **Battery setting in Settings → Background playback.** OEM battery optimisation can still stop background media apps. This item shows whether the app's battery use is unrestricted and opens the system page to change it.
+- **Media-session artwork:** cover art when present, otherwise the AS Media logo.
+- **Controls overlay:** the scrim no longer absorbs touches, so double-tap seeking works while the controls are visible.

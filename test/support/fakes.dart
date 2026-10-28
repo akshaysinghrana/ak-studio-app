@@ -66,6 +66,24 @@ class FakeMediaStore implements MediaStoreGateway {
 
   @override
   Future<String?> thumbnail(String uri, {int size = 256}) async => null;
+
+  final List<(List<String>, bool)> deleted = [];
+  bool confirmDelete = true;
+
+  @override
+  Future<bool> deleteMedia(List<String> uris, {required bool trash}) async {
+    if (!confirmDelete) return false;
+    deleted.add((uris, trash));
+    videos = videos.where((r) => !uris.contains(r.uri)).toList();
+    audio = audio.where((r) => !uris.contains(r.uri)).toList();
+    return true;
+  }
+
+  @override
+  Future<bool> isTrashSupported() async => true;
+
+  @override
+  Stream<void> changes() => const Stream.empty();
 }
 
 class FakeDocumentImporter implements DocumentImporter {

@@ -12,6 +12,7 @@ import 'library_actions.dart';
 import 'widgets/folder_tile.dart';
 import 'widgets/library_empty_state.dart';
 import 'widgets/media_collection.dart';
+import 'widgets/sort_menus.dart';
 
 /// Videos or Music tab: folders (default) or all items, search, sort,
 /// grid/list for videos, pull to refresh (spec 4.1, 6.2).
@@ -26,17 +27,7 @@ class MediaListScreen extends ConsumerStatefulWidget {
 
 class _MediaListScreenState extends ConsumerState<MediaListScreen> {
   final _search = TextEditingController();
-  LibrarySort _sort = LibrarySort.title;
   String _query = '';
-
-  static const _sortLabels = {
-    LibrarySort.title: 'Name',
-    LibrarySort.dateAdded: 'Date added',
-    LibrarySort.dateModified: 'Date modified',
-    LibrarySort.lastPlayed: 'Last played',
-    LibrarySort.duration: 'Duration',
-    LibrarySort.size: 'Size',
-  };
 
   bool get _isVideo => widget.kind == MediaKind.video;
 
@@ -53,26 +44,23 @@ class _MediaListScreenState extends ConsumerState<MediaListScreen> {
     // Searching always shows matching items, whatever the view.
     final showFolders = folderView && _query.isEmpty;
     final scanBusy = ref.watch(scanControllerProvider).busy;
+    final sort =
+        ref.watch(librarySortProvider(widget.kind.name)).value ??
+        LibrarySort.title;
+    final folderSort =
+        ref.watch(folderSortProvider(widget.kind)).value ?? FolderSort.name;
 
     return Scaffold(
       appBar: AppBar(
         title: Text(_isVideo ? 'Videos' : 'Music'),
         actions: [
-          if (!showFolders)
-            PopupMenuButton<LibrarySort>(
-              tooltip: 'Sort by',
-              icon: const Icon(Icons.sort),
-              initialValue: _sort,
-              onSelected: (s) => setState(() => _sort = s),
-              itemBuilder: (context) => [
-                for (final s in LibrarySort.values)
-                  CheckedPopupMenuItem(
-                    value: s,
-                    checked: s == _sort,
-                    child: Text(_sortLabels[s]!),
-                  ),
-              ],
-            ),
+          if (showFolders)
+            FolderSortButton(
+              prefKey: '${widget.kind.name}.folders',
+              value: folderSort,
+            )
+          else
+            FileSortButton(prefKey: widget.kind.name, value: sort),
           if (_isVideo && !showFolders) GridToggleButton(grid: grid),
           IconButton(
             tooltip: 'Choose files',
@@ -157,11 +145,11 @@ class _MediaListScreenState extends ConsumerState<MediaListScreen> {
                 child: showFolders
                     ? KeyedSubtree(
                         key: const ValueKey('folders'),
-                        child: _folders(),
+                        child: _folders(folderSort),
                       )
                     : KeyedSubtree(
                         key: const ValueKey('items'),
-                        child: _items(grid),
+                        child: _items(grid, sort),
                       ),
               ),
             ),
@@ -171,20 +159,21 @@ class _MediaListScreenState extends ConsumerState<MediaListScreen> {
     );
   }
 
-  Widget _folders() {
+  Widget _folders(FolderSort folderSort) {
     final folders = ref.watch(foldersProvider(widget.kind));
     return folders.when(
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (e, _) => Center(child: Text('Could not load folders: $e')),
       data: (all) {
         if (all.isEmpty) return _empty();
-        final visible = [
+        final visible = sortFolders([
           for (final f in all)
             if (!f.hidden) f,
-        ];
+        ], folderSort);
         final hiddenCount = all.length - visible.length;
         return ListView(
           physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.only(top: 4, bottom: 120),
           children: [
             if (visible.isEmpty)
               const Padding(
@@ -218,11 +207,11 @@ class _MediaListScreenState extends ConsumerState<MediaListScreen> {
     );
   }
 
-  Widget _items(bool grid) {
+  Widget _items(bool grid, LibrarySort sort) {
     final entries = ref.watch(
       libraryProvider((
         kind: widget.kind,
-        sort: _sort,
+        sort: sort,
         search: _query,
         folder: null,
       )),

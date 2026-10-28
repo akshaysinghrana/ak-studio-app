@@ -4,15 +4,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../app/providers.dart';
 import '../../../../app/theme/app_theme.dart';
+import '../../../../app/theme/brand_widgets.dart';
 import '../../../playback/domain/media_source.dart';
 import '../../application/library_providers.dart';
 import '../../data/media_library_repository.dart';
+import '../library_actions.dart';
 import 'media_tile.dart';
 
-enum _FolderAction { hide, show }
+enum _FolderAction { hide, show, delete }
 
-/// A folder row: preview thumbnail, name, item count, size and path, with
-/// Hide / Show in its menu.
+/// A folder card: preview thumbnail with a folder badge, name, item count,
+/// size and path; Hide / Show / Delete in its menu.
 class FolderTile extends ConsumerWidget {
   const FolderTile({
     super.key,
@@ -31,62 +33,80 @@ class FolderTile extends ConsumerWidget {
     final thumb = sample == null
         ? null
         : ref.watch(thumbnailProvider(sample)).value;
+    final text = Theme.of(context).textTheme;
+    final scheme = Theme.of(context).colorScheme;
     final noun = kind == MediaKind.video
         ? (folder.count == 1 ? 'video' : 'videos')
         : (folder.count == 1 ? 'song' : 'songs');
-    final scheme = Theme.of(context).colorScheme;
-    return ListTile(
+    return GlassCard(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
       onTap: onTap,
-      leading: ClipRRect(
-        borderRadius: BorderRadius.circular(AppTokens.spaceS),
-        child: SizedBox(
-          width: 80,
-          height: 56,
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              ThumbnailImage(path: thumb, icon: Icons.folder),
-              Align(
-                alignment: Alignment.bottomLeft,
-                child: Container(
-                  margin: const EdgeInsets.all(4),
-                  padding: const EdgeInsets.all(2),
-                  decoration: BoxDecoration(
-                    color: scheme.primaryContainer,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Icon(
-                    folder.hidden ? Icons.visibility_off : Icons.folder,
-                    size: 14,
-                    color: scheme.onPrimaryContainer,
+      padding: const EdgeInsets.all(10),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 92,
+            height: 62,
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Positioned.fill(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(AppTokens.radiusS),
+                    child: ThumbnailImage(
+                      path: thumb,
+                      seed: folder.name,
+                      kind: kind,
+                    ),
                   ),
                 ),
-              ),
-            ],
+                Positioned(
+                  left: -6,
+                  bottom: -6,
+                  child: IconBadge(
+                    icon: folder.hidden
+                        ? Icons.visibility_off_rounded
+                        : Icons.folder_rounded,
+                    size: 28,
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
-      ),
-      title: Text(folder.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-      subtitle: Text(
-        '${folder.count} $noun'
-        '${folder.totalBytes > 0 ? ' · ${formatBytes(folder.totalBytes)}' : ''}'
-        '${folder.hidden ? ' · Hidden' : ''}\n${folder.path}',
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
-      ),
-      isThreeLine: true,
-      trailing: folder.folder == null
-          ? null
-          : PopupMenuButton<_FolderAction>(
-              tooltip: 'Folder options for ${folder.name}',
-              onSelected: (a) => setFolderHidden(
-                context,
-                ref,
-                folder.folder!,
-                folder.name,
-                hidden: a == _FolderAction.hide,
-              ),
-              itemBuilder: (context) => [
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  folder.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: text.titleMedium,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '${folder.count} $noun'
+                  '${folder.totalBytes > 0 ? ' · ${formatBytes(folder.totalBytes)}' : ''}'
+                  '${folder.hidden ? ' · Hidden' : ''}',
+                  style: text.bodySmall?.copyWith(color: scheme.primary),
+                ),
+                Text(
+                  folder.path,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: text.bodySmall?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          PopupMenuButton<_FolderAction>(
+            tooltip: 'Folder options for ${folder.name}',
+            onSelected: (a) => _onFolderAction(context, ref, a),
+            itemBuilder: (context) => [
+              if (folder.folder != null)
                 if (folder.hidden)
                   const PopupMenuItem(
                     value: _FolderAction.show,
@@ -97,10 +117,63 @@ class FolderTile extends ConsumerWidget {
                     value: _FolderAction.hide,
                     child: Text('Hide folder'),
                   ),
-              ],
-            ),
+              PopupMenuItem(
+                value: _FolderAction.delete,
+                child: Text(
+                  'Delete folder…',
+                  style: TextStyle(color: scheme.error),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
+
+  Future<void> _onFolderAction(
+    BuildContext context,
+    WidgetRef ref,
+    _FolderAction a,
+  ) async {
+    switch (a) {
+      case _FolderAction.hide || _FolderAction.show:
+        await setFolderHidden(
+          context,
+          ref,
+          folder.folder!,
+          folder.name,
+          hidden: a == _FolderAction.hide,
+        );
+      case _FolderAction.delete:
+        await deleteFolder(context, ref, folder, kind);
+    }
+  }
+}
+
+/// Deletes the videos (or songs) of a folder, trash or permanently.
+Future<void> deleteFolder(
+  BuildContext context,
+  WidgetRef ref,
+  FolderSummary folder,
+  MediaKind kind,
+) async {
+  final items =
+      (await ref
+              .read(libraryRepositoryProvider)
+              .itemsInFolder(kind, folder.folder))
+          .where((i) => i.available)
+          .toList();
+  if (!context.mounted || items.isEmpty) return;
+  final noun = kind == MediaKind.video ? 'videos' : 'songs';
+  await LibraryActions.confirmDelete(
+    context,
+    ref,
+    items,
+    what: items.length == 1
+        ? 'the only ${noun.substring(0, noun.length - 1)} in "${folder.name}"'
+        : 'all ${items.length} $noun in "${folder.name}"',
+  );
 }
 
 /// Hides or shows a folder, with Undo (hiding is not destructive: nothing

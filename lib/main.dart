@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:audio_service/audio_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -6,7 +7,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path_provider/path_provider.dart';
 
 import 'app/app.dart';
 import 'app/providers.dart';
@@ -33,6 +36,11 @@ const _debugAutoload = String.fromEnvironment('UMP_DEBUG_AUTOLOAD');
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  LicenseRegistry.addLicense(() async* {
+    yield LicenseEntryWithLineBreaks(const [
+      'Poppins (font)',
+    ], await rootBundle.loadString('assets/fonts/OFL.txt'));
+  });
   final db = AppDatabase.open();
   try {
     // Opening runs migrations; fail visibly instead of crashing (spec 12).
@@ -71,7 +79,8 @@ Future<void> main() async {
         media.locator,
         size: 512,
       );
-      return path == null ? null : Uri.file(path);
+      // Lock screen / notification: real artwork, else the app logo.
+      return path == null ? await _logoArtwork() : Uri.file(path);
     },
   );
 
@@ -136,5 +145,23 @@ Future<void> main() async {
       );
       if (media != null) await coordinator.addToQueue(media);
     }
+  }
+}
+
+Uri? _logoUri;
+
+/// The bundled logo copied to a file once, for media-session artwork.
+Future<Uri?> _logoArtwork() async {
+  if (_logoUri != null) return _logoUri;
+  try {
+    final dir = await getTemporaryDirectory();
+    final file = File('${dir.path}/as_media_artwork.png');
+    if (!await file.exists()) {
+      final data = await rootBundle.load('assets/branding/logo.png');
+      await file.writeAsBytes(data.buffer.asUint8List(), flush: true);
+    }
+    return _logoUri = Uri.file(file.path);
+  } on Exception {
+    return null;
   }
 }

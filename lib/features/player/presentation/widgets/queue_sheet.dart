@@ -12,6 +12,7 @@ import '../../../playlists/presentation/playlist_dialogs.dart';
 Future<void> showQueueSheet(BuildContext context) {
   return showModalBottomSheet<void>(
     context: context,
+    useRootNavigator: true,
     isScrollControlled: true,
     showDragHandle: true,
     builder: (context) => DraggableScrollableSheet(

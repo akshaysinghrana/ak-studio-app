@@ -48,6 +48,7 @@ Future<void> showAddToPlaylist(
   final repo = ref.read(playlistRepositoryProvider);
   final playlistId = await showModalBottomSheet<String>(
     context: context,
+    useRootNavigator: true,
     showDragHandle: true,
     builder: (sheetContext) => Consumer(
       builder: (context, ref, _) {

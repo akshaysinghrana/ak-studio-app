@@ -10,6 +10,7 @@ import 'package:video_player/video_player.dart';
 import '../domain/background_policy.dart';
 import '../domain/media_source.dart';
 import '../domain/play_queue.dart';
+import '../../../core/platform/video_audio_only.dart';
 import '../../player/domain/subtitles.dart';
 import '../domain/seek.dart';
 import '../domain/sleep_timer.dart';
@@ -127,6 +128,7 @@ class PlaybackCoordinator extends BaseAudioHandler with SeekHandler {
         '${continueVideoAudioInBackground.value}',
       );
       _applyBackgroundPolicy();
+      _syncAudioOnly();
     });
   }
 
@@ -157,6 +159,38 @@ class PlaybackCoordinator extends BaseAudioHandler with SeekHandler {
     _setQueue(saved, persist: false);
     await _loadCurrent(autoplay: false);
     _log('queue restored (${saved.entries.length} items)');
+  }
+
+  /// Drops deleted files from the queue. If the current item was deleted,
+  /// playback moves to the next remaining item (or stops when none is left).
+  Future<void> removeMedia(Set<String> mediaIds) async {
+    if (_queue.isEmpty || mediaIds.isEmpty) return;
+    var q = _queue;
+    for (var i = q.entries.length - 1; i >= 0; i--) {
+      if (i != q.currentIndex && mediaIds.contains(q.entries[i].media.id)) {
+        q = q.removeAt(i);
+      }
+    }
+    if (!mediaIds.contains(q.current!.media.id)) {
+      _setQueue(q);
+      return;
+    }
+    final wasPlaying = controller.value?.value.isPlaying ?? false;
+    final remaining = [...q.entries]..removeAt(q.currentIndex);
+    if (remaining.isEmpty) {
+      await stop();
+      _setQueue(const PlayQueue.empty());
+      mediaItem.add(null);
+      return;
+    }
+    _setQueue(
+      PlayQueue.of(
+        remaining,
+        currentIndex: q.currentIndex.clamp(0, remaining.length - 1),
+        repeat: q.repeat,
+      ),
+    );
+    await _loadCurrent(autoplay: wasPlaying);
   }
 
   /// Removes a queued item other than the current one (spec 7.1).
@@ -367,6 +401,24 @@ class PlaybackCoordinator extends BaseAudioHandler with SeekHandler {
     _log(background ? 'app -> background' : 'app -> foreground');
     // Returning to the foreground never auto-resumes a policy pause.
     if (background) _applyBackgroundPolicy();
+    _syncAudioOnly();
+  }
+
+  final VideoAudioOnly _audioOnly = const VideoAudioOnly();
+  bool? _audioOnlyApplied;
+
+  /// Video audio playing in the background runs with the video track
+  /// disabled, so the hardware decoder is released (it can otherwise be
+  /// reclaimed by Android after a few minutes, stopping playback).
+  void _syncAudioOnly({bool force = false}) {
+    final wanted =
+        inBackground.value &&
+        _queue.current?.media.kind == MediaKind.video &&
+        continueVideoAudioInBackground.value;
+    if (!force && wanted == _audioOnlyApplied) return;
+    _audioOnlyApplied = wanted;
+    unawaited(_audioOnly.set(wanted));
+    _log('audio-only mode: $wanted');
   }
 
   void _applyBackgroundPolicy() {
@@ -483,6 +535,7 @@ class PlaybackCoordinator extends BaseAudioHandler with SeekHandler {
     }
     if (autoplay) await c.play();
     _broadcast(force: true);
+    _syncAudioOnly(force: true);
   }
 
   Future<void> _disposeController() async {
