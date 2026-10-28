@@ -63,14 +63,15 @@ class SyncController extends Notifier<SyncState> {
 
   /// Deletes account data in the cloud, then the account itself. Local media
   /// and playlists stay on the device, detached from the account.
-  Future<void> deleteAccount(String password) async {
+  /// [password] for password accounts; Google accounts confirm with Google.
+  Future<void> deleteAccount({String? password}) async {
     final auth = ref.read(authRepositoryProvider);
     final user = auth.currentUser;
     final remote = ref.read(remoteStoreProvider);
     if (user == null) return;
     // Re-authenticate first so a wrong password deletes nothing.
     await auth.deleteAccount(
-      password,
+      password: password,
       beforeDelete: () async => remote?.deleteUserData(user.uid),
     );
     await _sync?.disable(user.uid);

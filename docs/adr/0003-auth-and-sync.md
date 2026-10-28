@@ -5,7 +5,8 @@
 
 ## Decision
 
-- **Provider:** Firebase Authentication with email and password, plus Cloud Firestore for metadata.
+- **Provider:** Firebase Authentication (email/password and Google), behind the app's own sign-in screens, plus Cloud Firestore for metadata. No Firebase UI package is used.
+- **Google sign-in:** `google_sign_in` 7.2.0 (BSD-3) on Android Credential Manager. The flow is `authenticate()`, then the Google ID token, then `GoogleAuthProvider.credential`, then Firebase. Closing the picker is not reported as an error. Signing out also clears the Google account choice. To delete a Google account, the user confirms with Google again; there is no password prompt.
   - Package versions: `firebase_core` 5.1.0, `firebase_auth` 7.0.1, `cloud_firestore` 7.1.0, all BSD-3.
   - These need compileSdk 34 and minSdk 24, so they are compatible with the current toolchain.
 - **Guest-first:** the whole app works signed out and offline.
@@ -54,10 +55,16 @@ Media is referenced only by a fingerprint: SHA-256 of kind, file name, size and 
 
 ## Enabling (needs the project owner)
 
-1. Create a Firebase project and enable **Authentication → Email/Password**, plus a **Cloud Firestore** database.
-2. Run `dart pub global activate flutterfire_cli`, then `flutterfire configure --platforms=android`. This overwrites `lib/firebase_options.dart`.
-3. Deploy the rules: `firebase deploy --only firestore:rules`.
-4. Never commit service-account keys. `firebase_options.dart` contains only client identifiers.
+1. Create a Firebase project. Enable **Authentication → Email/Password** and **Google**, and create a **Cloud Firestore** database.
+2. Under Project settings → Android app `com.akshayrana.video_music_app`, add the SHA fingerprints of every signing key. Google sign-in fails with a configuration error without them. The debug key on the dev machine has these fingerprints:
+   - SHA-1 `8E:C0:F5:6D:A0:DE:B9:7C:C8:33:A4:D7:BE:F6:CC:AE:19:1C:0C:81`
+   - SHA-256 `BD:D2:50:EA:14:D0:E5:9D:03:12:A6:19:15:16:8F:11:27:67:38:62:AD:23:DB:D7:38:AF:97:C1:39:FD:94:7E`
+
+   Add the release (upload) key's fingerprints too, and Play App Signing's when publishing. Get them with `keytool -list -v -keystore <file> -alias <alias>`.
+3. Run `npm i -g firebase-tools`, `firebase login`, `dart pub global activate flutterfire_cli`, then `flutterfire configure --platforms=android`. This overwrites `lib/firebase_options.dart`.
+4. Set the **Web client ID** (Authentication → Sign-in method → Google → Web SDK configuration) in `lib/google_sign_in_options.dart`, or pass `--dart-define=GOOGLE_WEB_CLIENT_ID=...`. It is a public identifier, not a secret.
+5. Deploy the rules: `firebase deploy --only firestore:rules`.
+6. Never commit service-account keys. `firebase_options.dart` and the client ID are client identifiers only.
 
 ## Tests
 

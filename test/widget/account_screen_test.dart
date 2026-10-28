@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:video_music_app/app/providers.dart';
+import 'package:video_music_app/app/theme/brand_widgets.dart';
 import 'package:video_music_app/features/account/data/auth_repository.dart';
 import 'package:video_music_app/features/account/presentation/account_screen.dart';
+import 'package:video_music_app/features/account/presentation/google_button.dart';
 import 'package:video_music_app/features/playlists/data/playlist_repository.dart';
 import 'package:video_music_app/features/sync/data/remote_store.dart';
 import 'package:video_music_app/shared/data/app_database.dart';
@@ -56,7 +58,7 @@ void main() {
 
   testWidgets('validates input and shows friendly errors', (t) async {
     await pump(t, FakeAuthRepository(), remote: InMemoryRemoteStore());
-    await t.tap(find.widgetWithText(FilledButton, 'Sign in'));
+    await t.tap(find.widgetWithText(GradientButton, 'Sign in'));
     await t.pump();
     expect(find.text('Enter a valid email.'), findsOneWidget);
     expect(find.text('Use at least 6 characters.'), findsOneWidget);
@@ -66,7 +68,7 @@ void main() {
       find.widgetWithText(TextFormField, 'Password'),
       'wrong12',
     );
-    await t.tap(find.widgetWithText(FilledButton, 'Sign in'));
+    await t.tap(find.widgetWithText(GradientButton, 'Sign in'));
     await settle(t);
     expect(find.text('Email or password is incorrect.'), findsOneWidget);
     await unmount(t);
@@ -83,7 +85,7 @@ void main() {
       find.widgetWithText(TextFormField, 'Password'),
       'secret1',
     );
-    await t.tap(find.widgetWithText(FilledButton, 'Sign in'));
+    await t.tap(find.widgetWithText(GradientButton, 'Sign in'));
     await settle(t);
 
     expect(find.text('Sync playlists from this device?'), findsOneWidget);
@@ -93,6 +95,41 @@ void main() {
     expect(find.text('Sync is on'), findsOneWidget);
     // Declined: the guest playlist was not uploaded.
     expect(remote.data['uid-1']?['playlists'] ?? const {}, isEmpty);
+    await unmount(t);
+  });
+
+  testWidgets('Google sign-in offers sync, then shows the Google profile', (
+    t,
+  ) async {
+    await t.runAsync(() => PlaylistRepository(db).create('Guest list'));
+    final remote = InMemoryRemoteStore();
+    await pump(t, FakeAuthRepository(), remote: remote);
+    await t.ensureVisible(find.byType(GoogleSignInButton));
+    await t.pump();
+    await t.tap(find.byType(GoogleSignInButton));
+    await settle(t);
+
+    expect(find.text('Sync playlists from this device?'), findsOneWidget);
+    await t.tap(find.text('Add to account'));
+    await settle(t);
+    expect(find.text('Google User'), findsOneWidget);
+    expect(find.text('Signed in with Google'), findsOneWidget);
+    expect(remote.data['uid-g']?['playlists'], isNotEmpty);
+    await unmount(t);
+  });
+
+  testWidgets('closing the Google picker is not shown as an error', (t) async {
+    await pump(
+      t,
+      FakeAuthRepository(googleCancels: true),
+      remote: InMemoryRemoteStore(),
+    );
+    await t.ensureVisible(find.byType(GoogleSignInButton));
+    await t.pump();
+    await t.tap(find.byType(GoogleSignInButton));
+    await settle(t);
+    expect(find.text('Google sign-in was cancelled.'), findsNothing);
+    expect(find.byType(GoogleSignInButton), findsOneWidget);
     await unmount(t);
   });
 }

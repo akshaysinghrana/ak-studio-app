@@ -137,9 +137,12 @@ class FakeMediaPermissions implements MediaPermissions {
 }
 
 class FakeAuthRepository implements AuthRepository {
-  FakeAuthRepository({this.password = 'secret1'});
+  FakeAuthRepository({this.password = 'secret1', this.googleCancels = false});
 
   final String password;
+
+  /// Simulates the user closing Google's account picker.
+  final bool googleCancels;
   final _users = StreamController<AppUser?>.broadcast();
   AppUser? _current;
 
@@ -160,7 +163,11 @@ class FakeAuthRepository implements AuthRepository {
     if (password != this.password) {
       throw const AuthFailure('Email or password is incorrect.');
     }
-    _current = AppUser(uid: 'uid-1', email: email);
+    _current = AppUser(
+      uid: 'uid-1',
+      email: email,
+      methods: const {SignInMethod.password},
+    );
     _users.add(_current);
     return _current!;
   }
@@ -168,6 +175,24 @@ class FakeAuthRepository implements AuthRepository {
   @override
   Future<AppUser> register(String email, String password) =>
       signIn(email, password);
+
+  @override
+  Future<AppUser> signInWithGoogle() async {
+    if (googleCancels) {
+      throw const AuthFailure(
+        'Google sign-in was cancelled.',
+        code: 'canceled',
+      );
+    }
+    _current = const AppUser(
+      uid: 'uid-g',
+      email: 'g@example.com',
+      displayName: 'Google User',
+      methods: {SignInMethod.google},
+    );
+    _users.add(_current);
+    return _current!;
+  }
 
   @override
   Future<void> sendPasswordReset(String email) async {}
@@ -179,8 +204,8 @@ class FakeAuthRepository implements AuthRepository {
   }
 
   @override
-  Future<void> deleteAccount(
-    String password, {
+  Future<void> deleteAccount({
+    String? password,
     Future<void> Function()? beforeDelete,
   }) async {
     await beforeDelete?.call();
