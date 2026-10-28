@@ -87,7 +87,7 @@ void main() {
 
   setUpAll(() async {
     coordinator = await PlaybackCoordinator.init();
-    mediaDir = '${(await getExternalStorageDirectory())!.path}/test_media';
+    mediaDir = '${(await getApplicationSupportDirectory()).path}/test_media';
     // The runner pushes media after install and writes .ready last.
     await waitFor(
       'test media in $mediaDir',

@@ -24,7 +24,7 @@ void main() {
     tester,
   ) async {
     final coordinator = await PlaybackCoordinator.init();
-    final dir = '${(await getExternalStorageDirectory())!.path}/test_media';
+    final dir = '${(await getApplicationSupportDirectory()).path}/test_media';
     final deadline = DateTime.now().add(const Duration(minutes: 3));
     while (!File('$dir/.ready').existsSync()) {
       if (DateTime.now().isAfter(deadline)) fail('Missing test media in $dir');

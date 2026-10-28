@@ -545,7 +545,9 @@ def check_notification_controls():
         sh("cmd statusbar expand-notifications"); time.sleep(2)
     steps = []
     if play is None or nxt is None:
-        labels = sorted({n["desc"] for n in nodes if n["desc"]})[:25]
+        # Short labels only: other apps' notification text is personal data.
+        labels = sorted({n["desc"] for n in nodes
+                         if n["desc"] and len(n["desc"]) <= 20 and "\n" not in n["desc"]})[:25]
         record("9b notification media controls change real playback", False,
                f"buttons not found; shade labels={labels}")
         sh("cmd statusbar collapse")
@@ -626,8 +628,8 @@ def check_focus_loss():
     unlock(); open_app()
     ensure("PLAYING"); time.sleep(2)
     before = session()["state"]
-    sh("mkdir -p /sdcard/Music && cp /sdcard/Android/data/%s/files/test_media/ump_short_tone.mp3 "
-       "/sdcard/Music/ump_focus_test.mp3" % PKG)
+    sh("mkdir -p /sdcard/Music && run-as %s cat files/test_media/ump_short_tone.mp3 "
+       "> /sdcard/Music/ump_focus_test.mp3" % PKG)
     sh("cmd media scan /sdcard/Music/ump_focus_test.mp3 2>/dev/null; "
        "am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file:///sdcard/Music/ump_focus_test.mp3")
     time.sleep(3)

@@ -24,7 +24,7 @@ scripts/run_device_engine_tests.sh <device-id>
 scripts/run_device_library_test.sh <device-id>
 
 # OS lifecycle checks: lock, Home, media keys, PiP, battery saver, ...
-D=/storage/emulated/0/Android/data/com.akshayrana.video_music_app/files/test_media
+D=/data/user/0/com.akshayrana.video_music_app/files/test_media
 flutter build apk --debug --dart-define="UMP_DEBUG_AUTOLOAD=$D/ump_long.mp4;$D/ump_tone.mp3;$D/ump_portrait.mp4"
 adb install -r build/app/outputs/flutter-apk/app-debug.apk
 scripts/device_test_media.sh <device-id>

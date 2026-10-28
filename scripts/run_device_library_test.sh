@@ -9,6 +9,9 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DEVICE="$1"
 PKG=com.akshayrana.video_music_app
 ADB=(adb -s "$DEVICE")
+# Keep the screen on for the run (any power source) and restore the setting.
+STAY_ON="$("${ADB[@]}" shell settings get global stay_on_while_plugged_in | tr -d '\r')"
+"${ADB[@]}" shell svc power stayon true
 OUT="$ROOT/build/test_media"
 cd "$ROOT"
 [ -f "$OUT/ump_long.mp4" ] || { mkdir -p "$OUT"; bash scripts/gen_test_media.sh "$OUT"; }
@@ -25,6 +28,7 @@ cleanup() {
   "${ADB[@]}" shell rm -rf /sdcard/Movies/UMP_Test /sdcard/Music/UMP_Test
   scan
   echo "[runner] test media removed from shared storage"
+  "${ADB[@]}" shell settings put global stay_on_while_plugged_in "${STAY_ON:-0}"
 }
 trap cleanup EXIT
 

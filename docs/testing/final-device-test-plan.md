@@ -2,7 +2,7 @@
 
 Run this once, on the physical Android phone, after all features are built (agreed 2026-10-26). Automated suites run first; the manual rows need a person, mainly for the PIN unlock and system dialogs.
 
-**Setup:** connect the phone with USB debugging, unlock it, and keep it unlocked for the automated parts. Scripts keep the screen on (`svc power stayon usb`) and restore the setting afterwards.
+**Setup:** connect the phone with USB debugging, unlock it, and keep it unlocked for the automated parts. Scripts keep the screen on (`svc power stayon true`; this phone reports its USB cable as AC power) and restore the setting afterwards.
 
 ## A. Automated (about 25 min)
 
