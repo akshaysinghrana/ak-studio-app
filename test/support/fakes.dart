@@ -41,6 +41,10 @@ class FakeMediaStore implements MediaStoreGateway {
   final Map<String, MediaRecord?> documents = {};
   int queries = 0;
 
+  /// The next this-many queries return no rows, as Android briefly does
+  /// right after an app update.
+  int emptyQueries = 0;
+
   @override
   Future<int> sdkInt() async => 36;
 
@@ -51,6 +55,10 @@ class FakeMediaStore implements MediaStoreGateway {
     int limit = 500,
   }) async {
     queries++;
+    if (emptyQueries > 0) {
+      emptyQueries--;
+      return const [];
+    }
     final all = kind == MediaKind.video ? videos : audio;
     return all.skip(offset).take(limit).toList();
   }

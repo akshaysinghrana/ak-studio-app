@@ -26,7 +26,7 @@ class MediaCollection extends StatelessWidget {
     if (!grid || kind == MediaKind.audio) {
       return ListView.builder(
         physics: physics,
-        padding: const EdgeInsets.only(bottom: 120),
+        padding: const EdgeInsets.only(bottom: 24),
         itemCount: entries.length,
         itemBuilder: (context, i) => MediaTile(
           key: ValueKey(entries[i].item.id),
@@ -51,7 +51,7 @@ class MediaCollection extends StatelessWidget {
         final textHeight = MediaQuery.textScalerOf(context).scale(14) * 2 + 24;
         return GridView.builder(
           physics: physics,
-          padding: const EdgeInsets.fromLTRB(padding, padding, padding, 120),
+          padding: const EdgeInsets.fromLTRB(padding, padding, padding, 24),
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: columns,
             crossAxisSpacing: spacing,

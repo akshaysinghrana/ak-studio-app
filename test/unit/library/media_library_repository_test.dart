@@ -16,7 +16,12 @@ void main() {
     db = memoryDatabase();
     store = FakeMediaStore();
     importer = FakeDocumentImporter();
-    repo = MediaLibraryRepository(db, store, importer);
+    repo = MediaLibraryRepository(
+      db,
+      store,
+      importer,
+      emptyScanRecheckDelay: Duration.zero,
+    );
   });
 
   tearDown(() => db.close());
@@ -119,6 +124,24 @@ void main() {
     expect(result.imported.single.item.origin, MediaOrigin.imported);
     expect(result.skipped, 1);
     expect(importer.released, [bad]);
+  });
+
+  test('a briefly empty MediaStore answer does not hide the library', () async {
+    store.videos = [record(1), record(2)];
+    await repo.scanMediaStore({MediaKind.video});
+    store.emptyQueries = 1;
+    final summary = await repo.scanMediaStore({MediaKind.video});
+    expect(summary.missing, 0);
+    expect(await all(MediaKind.video), hasLength(2));
+  });
+
+  test('deleting every file of a kind still marks them unavailable', () async {
+    store.videos = [record(1), record(2)];
+    await repo.scanMediaStore({MediaKind.video});
+    store.videos = [];
+    final summary = await repo.scanMediaStore({MediaKind.video});
+    expect(summary.missing, 2);
+    expect(await all(MediaKind.video), isEmpty);
   });
 
   test('imported items become unavailable when their grant is gone', () async {

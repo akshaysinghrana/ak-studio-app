@@ -120,12 +120,17 @@ class MediaLibraryRepository {
     this._store,
     this._importer, {
     Random? random,
+    this.emptyScanRecheckDelay = const Duration(seconds: 2),
   }) : _random = random ?? Random.secure();
 
   final AppDatabase _db;
   final MediaStoreGateway _store;
   final DocumentImporter _importer;
   final Random _random;
+
+  /// How long a scan waits before asking MediaStore again when it suddenly
+  /// reports no files of a kind the library has (see [scanMediaStore]).
+  final Duration emptyScanRecheckDelay;
 
   static const pageSize = 500;
 
@@ -294,26 +299,61 @@ class MediaLibraryRepository {
     final scanId = DateTime.now().microsecondsSinceEpoch;
     var added = 0, updated = 0, missing = 0, restored = 0, scanned = 0;
     for (final kind in kinds) {
-      for (var offset = 0; ; offset += pageSize) {
-        final page = await _store.query(kind, offset: offset, limit: pageSize);
-        if (page.isEmpty) break;
-        final result = await _upsertPage(page, MediaOrigin.mediaStore, scanId);
-        added += result.added;
-        updated += result.updated;
-        restored += result.restored;
-        scanned += page.length;
-        onProgress?.call(scanned);
-        if (page.length < pageSize) break;
+      var seen = 0;
+      for (var attempt = 0; attempt < 2; attempt++) {
+        for (var offset = 0; ; offset += pageSize) {
+          final page = await _store.query(
+            kind,
+            offset: offset,
+            limit: pageSize,
+          );
+          if (page.isEmpty) break;
+          final result = await _upsertPage(
+            page,
+            MediaOrigin.mediaStore,
+            scanId,
+          );
+          added += result.added;
+          updated += result.updated;
+          restored += result.restored;
+          scanned += page.length;
+          seen += page.length;
+          onProgress?.call(scanned);
+          if (page.length < pageSize) break;
+        }
+        // Right after an app update Android can briefly answer with no rows
+        // although nothing changed. Ask once more before trusting it.
+        if (seen > 0 || attempt > 0 || !await _hasAvailable(kind)) break;
+        await Future<void>.delayed(emptyScanRecheckDelay);
       }
-      missing +=
-          await (_db.update(_items)..where(
-                (t) =>
-                    t.kind.equalsValue(kind) &
-                    t.origin.equalsValue(MediaOrigin.mediaStore) &
-                    t.lastSeenScan.equals(scanId).not() &
-                    t.available.equals(true),
-              ))
-              .write(const MediaItemsCompanion(available: Value(false)));
+      final unseen = _db.update(_items)
+        ..where(
+          (t) =>
+              t.kind.equalsValue(kind) &
+              t.origin.equalsValue(MediaOrigin.mediaStore) &
+              t.lastSeenScan.equals(scanId).not() &
+              t.available.equals(true),
+        );
+      if (seen > 0) {
+        missing += await unseen.write(
+          const MediaItemsCompanion(available: Value(false)),
+        );
+      } else {
+        // Still empty: only drop items MediaStore confirms are gone.
+        for (final item
+            in await (_db.select(_items)..where(
+                  (t) =>
+                      t.kind.equalsValue(kind) &
+                      t.origin.equalsValue(MediaOrigin.mediaStore) &
+                      t.available.equals(true),
+                ))
+                .get()) {
+          if (await _store.describe(item.locator) == null) {
+            await markUnavailable(item.id);
+            missing++;
+          }
+        }
+      }
     }
     await refreshImportedAccess();
     return ScanSummary(
@@ -322,6 +362,20 @@ class MediaLibraryRepository {
       missing: missing,
       restored: restored,
     );
+  }
+
+  Future<bool> _hasAvailable(MediaKind kind) async {
+    final row =
+        await (_db.select(_items)
+              ..where(
+                (t) =>
+                    t.kind.equalsValue(kind) &
+                    t.origin.equalsValue(MediaOrigin.mediaStore) &
+                    t.available.equals(true),
+              )
+              ..limit(1))
+            .getSingleOrNull();
+    return row != null;
   }
 
   /// Opens the system picker and indexes the chosen MP4/MP3 documents.

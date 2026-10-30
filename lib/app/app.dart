@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -29,7 +30,12 @@ class MediaPlayerApp extends ConsumerWidget {
         valueListenable: pip.isActive,
         builder: (context, inPip, _) => inPip
             ? PipView(coordinator: coordinator)
-            : AppBackdrop(child: LibraryAutoRefresh(child: child!)),
+            // Screens without an AppBar (Home) take the bar icon colours
+            // from here; AppBars set the same style from the theme.
+            : AnnotatedRegion<SystemUiOverlayStyle>(
+                value: AppTheme.overlayStyle(Theme.of(context).brightness),
+                child: AppBackdrop(child: LibraryAutoRefresh(child: child!)),
+              ),
       ),
     );
   }

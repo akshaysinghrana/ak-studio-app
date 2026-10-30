@@ -12,8 +12,8 @@ class ShellScaffold extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // Content scrolls under the floating mini-player and navigation bar.
-      extendBody: true,
+      // Tabs end above the mini-player and navigation bar, so their last rows
+      // and floating buttons are never covered, whatever the player's height.
       body: shell,
       bottomNavigationBar: Column(
         mainAxisSize: MainAxisSize.min,

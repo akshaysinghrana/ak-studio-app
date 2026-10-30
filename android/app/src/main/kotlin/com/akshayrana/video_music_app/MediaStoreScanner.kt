@@ -13,6 +13,7 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
 import android.provider.OpenableColumns
+import android.util.Log
 import android.util.Size
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
@@ -29,6 +30,7 @@ class MediaStoreScanner(private val context: Context) : MethodChannel.MethodCall
     companion object {
         const val CHANNEL = "com.akshayrana.video_music_app/media_store"
         private const val UNKNOWN = "<unknown>"
+        private const val TAG = "MediaStoreScanner"
     }
 
     private val executor = Executors.newFixedThreadPool(2)
@@ -129,8 +131,15 @@ class MediaStoreScanner(private val context: Context) : MethodChannel.MethodCall
                 "$sort LIMIT $limit OFFSET $offset",
             )
         }
+        // A null cursor means MediaStore did not answer (e.g. the provider is
+        // restarting), not that there are no files. Failing here stops a
+        // rescan from marking the whole library unavailable.
+        if (cursor == null) {
+            Log.w(TAG, "MediaStore returned no cursor for $kind (offset $offset)")
+            throw IllegalStateException("MediaStore unavailable")
+        }
         val rows = mutableListOf<Map<String, Any?>>()
-        cursor?.use { c ->
+        cursor.use { c ->
             while (c.moveToNext()) {
                 val id = c.getLong(c.getColumnIndexOrThrow(MediaStore.MediaColumns._ID))
                 val folder = c.stringOrNull(MediaStore.MediaColumns.RELATIVE_PATH)

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 /// Brand palette taken from the AS Media icon: deep navy with an electric
 /// blue → cyan gradient.
@@ -53,6 +54,17 @@ abstract final class AppTokens {
 
 abstract final class AppTheme {
   static const fontFamily = 'Poppins';
+
+  /// Status and navigation bar icons that contrast with the page. AppBars are
+  /// transparent, so Flutter cannot infer this from their background.
+  static SystemUiOverlayStyle overlayStyle(Brightness brightness) =>
+      (brightness == Brightness.dark
+              ? SystemUiOverlayStyle.light
+              : SystemUiOverlayStyle.dark)
+          .copyWith(
+            statusBarColor: Colors.transparent,
+            systemNavigationBarColor: Colors.transparent,
+          );
 
   static ThemeData dark() {
     const scheme = ColorScheme(
@@ -156,6 +168,7 @@ abstract final class AppTheme {
         elevation: 0,
         scrolledUnderElevation: 0,
         centerTitle: false,
+        systemOverlayStyle: overlayStyle(scheme.brightness),
         // Theme text styles have no sizes until localized, so styles captured
         // here set them explicitly.
         titleTextStyle: _style(24, FontWeight.w700, scheme.onSurface),
@@ -273,7 +286,7 @@ abstract final class AppTheme {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppTokens.radiusS),
         ),
-        labelStyle: _style(14, FontWeight.w600, null),
+        labelStyle: _style(14, FontWeight.w600, scheme.onSurface),
       ),
       popupMenuTheme: PopupMenuThemeData(
         color: scheme.surfaceContainerHigh,
@@ -307,7 +320,7 @@ abstract final class AppTheme {
         contentTextStyle: _style(
           14,
           FontWeight.w400,
-          dark ? AppColors.text : null,
+          dark ? AppColors.text : scheme.onInverseSurface,
         ),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppTokens.radiusS),

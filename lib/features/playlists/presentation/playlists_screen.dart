@@ -22,21 +22,18 @@ class PlaylistsScreen extends ConsumerWidget {
     final text = Theme.of(context).textTheme;
     return Scaffold(
       appBar: AppBar(title: const Text('Playlists')),
-      floatingActionButton: Padding(
-        padding: const EdgeInsets.only(bottom: 80),
-        child: FloatingActionButton.extended(
-          onPressed: () async {
-            final name = await askPlaylistName(context);
-            if (name == null) return;
-            final id = await ref.read(playlistRepositoryProvider).create(name);
-            if (context.mounted) context.push(Routes.playlist(id));
-          },
-          icon: const Icon(Icons.add_rounded),
-          label: const Text('New playlist'),
-        ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () async {
+          final name = await askPlaylistName(context);
+          if (name == null) return;
+          final id = await ref.read(playlistRepositoryProvider).create(name);
+          if (context.mounted) context.push(Routes.playlist(id));
+        },
+        icon: const Icon(Icons.add_rounded),
+        label: const Text('New playlist'),
       ),
       body: ListView(
-        padding: const EdgeInsets.only(bottom: 180),
+        padding: const EdgeInsets.only(bottom: 96),
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),

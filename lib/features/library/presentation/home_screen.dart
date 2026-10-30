@@ -93,7 +93,7 @@ class HomeScreen extends ConsumerWidget {
                 onRefresh: () => LibraryActions.scan(context, ref),
                 child: ListView(
                   physics: const AlwaysScrollableScrollPhysics(),
-                  padding: const EdgeInsets.only(bottom: 120),
+                  padding: const EdgeInsets.only(bottom: 24),
                   children: [
                     Padding(
                       padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),

@@ -173,7 +173,7 @@ class _MediaListScreenState extends ConsumerState<MediaListScreen> {
         final hiddenCount = all.length - visible.length;
         return ListView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.only(top: 4, bottom: 120),
+          padding: const EdgeInsets.only(top: 4, bottom: 24),
           children: [
             if (visible.isEmpty)
               const Padding(
