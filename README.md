@@ -1,5 +1,7 @@
 # AS Media
 
+App to play music and video with premium features.
+
 Local-first Flutter player for MP4 and MP3 files. Android only for now. The product and engineering source of truth is [MEDIA_PLAYER_SPEC.md](MEDIA_PLAYER_SPEC.md). Working rules are in [CLAUDE.md](CLAUDE.md).
 
 **Status:** Phases 0–8 implemented (Android). The final on-device pass is pending; see [docs/testing/final-device-test-plan.md](docs/testing/final-device-test-plan.md). Decisions: ADRs [0001](docs/adr/0001-media-engine.md) (engine), [0002](docs/adr/0002-local-storage-and-media-access.md) (storage and media access), [0003](docs/adr/0003-auth-and-sync.md) (accounts and sync).
