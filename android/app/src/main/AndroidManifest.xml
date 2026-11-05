@@ -25,11 +25,14 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <!-- Required for foregroundServiceType="mediaPlayback" when targeting API 34+. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
-    <!-- POST_NOTIFICATIONS is intentionally omitted: media-session notifications are exempt on
-         Android 13+. Add it only if non-media notifications are introduced. -->
+    <!-- Media-session notifications are exempt on Android 13+; this permission is for download
+         progress notifications only (ADR 0004) and is requested on the first download. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Android 14+: long downloads run as user-initiated data transfer jobs (ADR 0004). -->
+    <uses-permission android:name="android.permission.RUN_USER_INITIATED_JOBS" />
 
-    <!-- ===== Network: account auth and metadata sync only (spec section 9). ===== -->
-    <!-- Media files are never uploaded. Playback works fully offline. -->
+    <!-- ===== Network: accounts/sync (spec 9), online discovery, streaming and downloads
+         (ADR 0004). Local media files are never uploaded. Local playback works offline. ===== -->
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Merged in by Firebase/Play services but not needed by Auth or Firestore. -->
     <uses-permission
@@ -86,6 +89,13 @@
                 <action android:name="android.intent.action.MEDIA_BUTTON" />
             </intent-filter>
         </receiver>
+
+        <!-- background_downloader: UIDT job service for long downloads on Android 14+. -->
+        <service
+            android:name="com.bbflight.background_downloader.UIDTJobService"
+            android:permission="android.permission.BIND_JOB_SERVICE"
+            android:exported="true"
+            android:foregroundServiceType="dataSync" />
 
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->

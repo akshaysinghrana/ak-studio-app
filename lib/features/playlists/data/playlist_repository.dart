@@ -123,6 +123,16 @@ class PlaylistRepository {
     return id;
   }
 
+  /// The playlist called [name] (case-insensitive), created if missing.
+  Future<String> findOrCreate(String name) async {
+    final existing =
+        await (_db.select(_playlists)
+              ..where((t) => t.name.lower().equals(name.toLowerCase()))
+              ..limit(1))
+            .getSingleOrNull();
+    return existing?.id ?? await create(name);
+  }
+
   Future<void> rename(String id, String name) =>
       (_db.update(_playlists)..where((t) => t.id.equals(id))).write(
         PlaylistsCompanion(

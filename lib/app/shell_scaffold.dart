@@ -48,6 +48,11 @@ class ShellScaffold extends StatelessWidget {
                   label: 'Music',
                 ),
                 NavigationDestination(
+                  icon: Icon(Icons.explore_outlined),
+                  selectedIcon: Icon(Icons.explore_rounded),
+                  label: 'Discover',
+                ),
+                NavigationDestination(
                   icon: Icon(Icons.queue_music_outlined),
                   selectedIcon: Icon(Icons.queue_music_rounded),
                   label: 'Playlists',

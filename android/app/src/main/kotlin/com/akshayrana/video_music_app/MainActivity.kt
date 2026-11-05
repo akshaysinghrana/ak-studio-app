@@ -115,6 +115,29 @@ class MainActivity : AudioServiceActivity() {
                     val pm = getSystemService(POWER_SERVICE) as android.os.PowerManager
                     result.success(pm.isIgnoringBatteryOptimizations(packageName))
                 }
+                // Package and signing-certificate SHA-1 (hex, no colons) for
+                // Google API keys restricted to this Android app.
+                "appIdentity" -> {
+                    val sha1 = try {
+                        val signatures = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                            packageManager.getPackageInfo(
+                                packageName, PackageManager.GET_SIGNING_CERTIFICATES,
+                            ).signingInfo?.apkContentsSigners
+                        } else {
+                            @Suppress("DEPRECATION")
+                            packageManager.getPackageInfo(
+                                packageName, PackageManager.GET_SIGNATURES,
+                            ).signatures
+                        }
+                        signatures?.firstOrNull()?.toByteArray()?.let { cert ->
+                            java.security.MessageDigest.getInstance("SHA-1").digest(cert)
+                                .joinToString("") { "%02X".format(it) }
+                        }
+                    } catch (e: Exception) {
+                        null
+                    }
+                    result.success(mapOf("package" to packageName, "sha1" to sha1))
+                }
                 "openBatterySettings" -> {
                     val intent = Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
                         .setData(android.net.Uri.fromParts("package", packageName, null))

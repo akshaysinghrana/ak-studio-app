@@ -364,6 +364,18 @@ class MediaLibraryRepository {
     );
   }
 
+  /// The MediaStore item for a file, e.g. a finished download.
+  Future<LibraryItem?> findByFolderAndName(String folder, String name) =>
+      (_db.select(_items)
+            ..where(
+              (t) =>
+                  t.folder.equals(folder) &
+                  t.displayName.equals(name) &
+                  t.available.equals(true),
+            )
+            ..limit(1))
+          .getSingleOrNull();
+
   Future<bool> _hasAvailable(MediaKind kind) async {
     final row =
         await (_db.select(_items)

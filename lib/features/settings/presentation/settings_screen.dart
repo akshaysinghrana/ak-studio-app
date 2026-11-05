@@ -9,6 +9,7 @@ import '../../../app/theme/app_theme.dart';
 import '../../../app/theme/brand_widgets.dart';
 import '../../../core/permissions/media_permissions.dart';
 import '../../../core/platform/screen_control.dart';
+import '../../discover/application/online_providers.dart';
 import '../../library/application/library_providers.dart';
 import '../../library/presentation/hidden_folders_screen.dart';
 import '../../library/presentation/library_actions.dart';
@@ -61,6 +62,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final auth = ref.watch(authRepositoryProvider);
     final user = ref.watch(authStateProvider).value;
     final prefs = ref.read(preferencesProvider);
+    final youtubeReady = ref.watch(youtubeApiKeyProvider).value != null;
+    final jamendoReady = ref.watch(jamendoClientIdProvider).value != null;
+    final activeDownloads = ref.watch(activeDownloadCountProvider).value ?? 0;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
@@ -168,6 +172,38 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     ),
                   ],
                 ),
+              ),
+            ],
+          ),
+          _Group(
+            title: 'Online & downloads',
+            children: [
+              _Item(
+                icon: Icons.travel_explore_rounded,
+                colors: AppColors.accents[2],
+                title: 'Online sources',
+                subtitle: [
+                  'Audius ready',
+                  youtubeReady ? 'YouTube ready' : 'YouTube not set up',
+                  jamendoReady ? 'Jamendo ready' : 'Jamendo not set up',
+                ].join(' · '),
+                onTap: () => context.push(Routes.onlineSources),
+              ),
+              _Item(
+                icon: Icons.download_rounded,
+                colors: AppColors.accents[3],
+                title: 'Downloads',
+                subtitle: activeDownloads > 0
+                    ? '$activeDownloads in progress'
+                    : 'Queue and history',
+                onTap: () => context.push(Routes.downloads),
+              ),
+              _Item(
+                icon: Icons.tune_rounded,
+                colors: AppColors.accents[5],
+                title: 'Download settings',
+                subtitle: 'Wi-Fi only, simultaneous downloads, playlist',
+                onTap: () => context.push(Routes.downloadSettings),
               ),
             ],
           ),

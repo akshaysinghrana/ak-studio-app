@@ -16,6 +16,12 @@ class PreferencesRepository {
   static const brightnessGestureKey = 'player.brightnessGesture';
   static const volumeGestureKey = 'player.volumeGesture';
   static const subtitleSizeKey = 'player.subtitleSize';
+  static const youtubeApiKeyKey = 'online.youtubeApiKey';
+  static const jamendoClientIdKey = 'online.jamendoClientId';
+  static const downloadWifiOnlyKey = 'downloads.wifiOnly';
+  static const downloadConcurrencyKey = 'downloads.concurrency';
+  static const downloadAddToPlaylistKey = 'downloads.addToPlaylist';
+  static const jamendoQualityKey = 'downloads.jamendoQuality';
 
   Stream<String?> _watch(String key) =>
       (_db.select(_db.userPreferences)..where((t) => t.key.equals(key)))
@@ -92,4 +98,58 @@ class PreferencesRepository {
 
   Future<void> setSort(String key, String value) =>
       _set('library.sort.$key', value, syncEligible: false);
+
+  // Online sources (ADR 0004). Credentials are device-only and never synced.
+
+  Stream<String?> watchYoutubeApiKey() => _watch(youtubeApiKeyKey);
+
+  Future<void> setYoutubeApiKey(String key) =>
+      _set(youtubeApiKeyKey, key.trim(), syncEligible: false);
+
+  Stream<String?> watchJamendoClientId() => _watch(jamendoClientIdKey);
+
+  Future<void> setJamendoClientId(String id) =>
+      _set(jamendoClientIdKey, id.trim(), syncEligible: false);
+
+  // Downloads (ADR 0004): device-only.
+
+  Stream<bool> watchDownloadWifiOnly() =>
+      _watch(downloadWifiOnlyKey).map((v) => v == 'true');
+
+  Future<bool> downloadWifiOnly() async =>
+      await _get(downloadWifiOnlyKey) == 'true';
+
+  Future<void> setDownloadWifiOnly(bool on) =>
+      _set(downloadWifiOnlyKey, '$on', syncEligible: false);
+
+  /// Simultaneous downloads, 1–3 (default 2).
+  Stream<int> watchDownloadConcurrency() =>
+      _watch(downloadConcurrencyKey)
+          .map((v) => (int.tryParse(v ?? '') ?? 2).clamp(1, 3));
+
+  Future<int> downloadConcurrency() async =>
+      (int.tryParse(await _get(downloadConcurrencyKey) ?? '') ?? 2).clamp(1, 3);
+
+  Future<void> setDownloadConcurrency(int n) =>
+      _set(downloadConcurrencyKey, '${n.clamp(1, 3)}', syncEligible: false);
+
+  /// Adds finished downloads to the "Downloads" playlist (default on).
+  Stream<bool> watchDownloadAddToPlaylist() =>
+      _watch(downloadAddToPlaylistKey).map((v) => v != 'false');
+
+  Future<bool> downloadAddToPlaylist() async =>
+      await _get(downloadAddToPlaylistKey) != 'false';
+
+  Future<void> setDownloadAddToPlaylist(bool on) =>
+      _set(downloadAddToPlaylistKey, '$on', syncEligible: false);
+
+  /// Jamendo download format: `mp32` (VBR high, default) or `mp31` (96 kbps).
+  Stream<String> watchJamendoQuality() =>
+      _watch(jamendoQualityKey).map((v) => v == 'mp31' ? 'mp31' : 'mp32');
+
+  Future<String> jamendoQuality() async =>
+      await _get(jamendoQualityKey) == 'mp31' ? 'mp31' : 'mp32';
+
+  Future<void> setJamendoQuality(String format) =>
+      _set(jamendoQualityKey, format, syncEligible: false);
 }

@@ -15,14 +15,19 @@ import 'app/app.dart';
 import 'app/providers.dart';
 import 'app/router.dart';
 import 'app/startup_error_app.dart';
+import 'core/permissions/media_permissions.dart';
 import 'core/platform/media_store.dart';
 import 'features/account/data/auth_repository.dart';
 import 'core/platform/picture_in_picture.dart';
+import 'features/discover/application/online_providers.dart';
+import 'features/downloads/application/download_manager.dart';
+import 'features/downloads/data/download_engine.dart';
 import 'features/library/data/media_library_repository.dart';
 import 'features/playback/application/playback_coordinator.dart';
 import 'features/playback/data/drift_progress_store.dart';
 import 'features/playback/data/drift_queue_store.dart';
 import 'features/playback/domain/media_source.dart';
+import 'features/playlists/data/playlist_repository.dart';
 import 'features/settings/data/preferences_repository.dart';
 import 'features/sync/application/sync_service.dart';
 import 'features/sync/data/remote_store.dart';
@@ -75,6 +80,10 @@ Future<void> main() async {
     queueStore: DriftQueueStore(db),
     onLoadError: (media) => library.verifyAvailability(media.id),
     artworkFor: (media) async {
+      if (media.isOnline) {
+        final art = media.artworkUrl;
+        return art == null ? await _logoArtwork() : Uri.parse(art);
+      }
       final path = await const MethodChannelMediaStore().thumbnail(
         media.locator,
         size: 512,
@@ -92,6 +101,29 @@ Future<void> main() async {
       coordinator.continueVideoAudioInBackground.value,
     ),
   );
+
+  // Downloads (ADR 0004): finished files are added through a permission-aware
+  // rescan, the same way the library refreshes itself.
+  final permissions = PlatformMediaPermissions(const MethodChannelMediaStore());
+  final downloads = DownloadManager(
+    db: db,
+    engine: BackgroundDownloaderEngine(),
+    preferences: preferences,
+    library: library,
+    playlists: PlaylistRepository(db),
+    refreshLibrary: (kind) async {
+      final access = await permissions.status(kind);
+      if (access == MediaAccess.granted || access == MediaAccess.limited) {
+        await library.scanMediaStore({kind});
+      }
+    },
+  );
+  try {
+    await downloads.init();
+  } on Exception catch (e) {
+    // Downloads are optional; local playback must start regardless.
+    debugPrint('[downloads] init failed: $e');
+  }
 
   final autoload = kDebugMode && _debugAutoload.isNotEmpty;
   final router = buildRouter(
@@ -117,6 +149,7 @@ Future<void> main() async {
         preferencesProvider.overrideWithValue(preferences),
         authRepositoryProvider.overrideWithValue(auth),
         remoteStoreProvider.overrideWithValue(remote),
+        downloadManagerProvider.overrideWithValue(downloads),
       ],
       child: MediaPlayerApp(router: router),
     ),

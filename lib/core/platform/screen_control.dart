@@ -31,6 +31,17 @@ class ScreenControl {
   Future<bool> isBatteryUnrestricted() async =>
       await _channel.invokeMethod<bool>('isBatteryUnrestricted') ?? true;
 
+  /// This app's package name and signing-certificate SHA-1, sent with
+  /// Google API requests so keys restricted to the app are accepted.
+  Future<({String? package, String? sha1})> appIdentity() async {
+    try {
+      final m = await _channel.invokeMapMethod<String, String?>('appIdentity');
+      return (package: m?['package'], sha1: m?['sha1']);
+    } on Exception {
+      return (package: null, sha1: null);
+    }
+  }
+
   Future<void> openBatterySettings() =>
       _channel.invokeMethod<void>('openBatterySettings');
 }

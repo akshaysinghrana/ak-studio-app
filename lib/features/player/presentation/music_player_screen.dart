@@ -38,7 +38,8 @@ class MusicPlayerScreen extends ConsumerWidget {
         final subtitle = [media?.artist, media?.album].nonNulls.join(' · ');
         final art = media == null
             ? null
-            : ref.watch(thumbnailProvider(media.locator)).value;
+            : media.artworkUrl ??
+                  ref.watch(thumbnailProvider(media.locator)).value;
         return Scaffold(
           extendBodyBehindAppBar: true,
           appBar: AppBar(
@@ -145,7 +146,10 @@ class MusicPlayerScreen extends ConsumerWidget {
                                 showSeekBar: false,
                               ),
                               const SizedBox(height: 8),
-                              _ModeRow(mediaId: media.id),
+                              _ModeRow(
+                                mediaId: media.id,
+                                canFavorite: !media.isOnline,
+                              ),
                               const SizedBox(height: 8),
                               _ExtrasRow(coordinator: coordinator),
                             ],
@@ -197,9 +201,12 @@ class _Artwork extends StatelessWidget {
 /// Repeat, favourite and shuffle (spec 6.1). The repeat button cycles
 /// off → all → one and states the mode in its label, not colour alone.
 class _ModeRow extends ConsumerWidget {
-  const _ModeRow({required this.mediaId});
+  const _ModeRow({required this.mediaId, required this.canFavorite});
 
   final String mediaId;
+
+  /// Streamed catalogue tracks are not library items; download them first.
+  final bool canFavorite;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -219,14 +226,15 @@ class _ModeRow extends ConsumerWidget {
           onPressed: () => coordinator.setRepeat(next),
           icon: Icon(icon),
         ),
-        IconButton(
-          tooltip: favorite ? 'Remove from favourites' : 'Add to favourites',
-          isSelected: favorite,
-          onPressed: () =>
-              ref.read(playlistRepositoryProvider).toggleFavorite(mediaId),
-          icon: const Icon(Icons.favorite_border),
-          selectedIcon: const Icon(Icons.favorite),
-        ),
+        if (canFavorite)
+          IconButton(
+            tooltip: favorite ? 'Remove from favourites' : 'Add to favourites',
+            isSelected: favorite,
+            onPressed: () =>
+                ref.read(playlistRepositoryProvider).toggleFavorite(mediaId),
+            icon: const Icon(Icons.favorite_border),
+            selectedIcon: const Icon(Icons.favorite),
+          ),
         IconButton(
           tooltip: queue.shuffled ? 'Shuffle on' : 'Shuffle off',
           isSelected: queue.shuffled,

@@ -15,7 +15,8 @@
 - **Files picked with the system picker:** need no permission; access is kept per file.
 - **Not requested:** all-files access and photos access.
 - **Foreground service / wake lock:** to keep playing when the screen is off.
-- **Internet:** used only for sign-in and sync.
+- **Internet:** used for sign-in and sync, online discovery, streaming and downloads (see below).
+- **Notifications:** asked for on your first download, to show download progress.
 
 ## Optional account
 If you sign in, the following sync to your account (Firebase, operated by Google):
@@ -29,6 +30,13 @@ You can:
 - sign out and keep your data on the device;
 - sign out and remove the account's playlists from the device;
 - delete your account, which first deletes its synced data.
+
+## Online discovery and downloads
+- **Music search (Audius, and Jamendo if you add a client ID):** your search terms and the tracks you play are sent to that service. Streams come from the service's servers.
+- **YouTube (if you add an API key):** your search terms go to the YouTube Data API. Videos play in YouTube's own embedded player, which is covered by Google's privacy policy.
+- **Downloads:** files are fetched from the source you chose and saved to `Music/AS Media` or `Movies/AS Media` on your device. Download history is stored only on the device.
+- The YouTube API key and Jamendo client ID are stored only on the device and are never synced.
+- Nothing from your local library is sent to these services.
 
 ## Analytics and advertising
 None.

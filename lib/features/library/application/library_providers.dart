@@ -50,7 +50,10 @@ final libraryCountProvider = StreamProvider.autoDispose<int>(
 
 /// Cached thumbnail path per locator (the platform also caches on disk).
 final thumbnailProvider = FutureProvider.autoDispose.family<String?, String>(
-  (ref, uri) => ref.watch(mediaStoreProvider).thumbnail(uri),
+  // Online streams have catalogue artwork instead; never decode them here.
+  (ref, uri) async => uri.startsWith('http')
+      ? null
+      : ref.watch(mediaStoreProvider).thumbnail(uri),
 );
 
 final mediaAccessProvider =

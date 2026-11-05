@@ -46,6 +46,15 @@ class PrivacyScreen extends StatelessWidget {
                 'device, or delete your account and its synced data.',
           ),
           section(
+            'Online discovery and downloads',
+            'When you search or play in Discover, your search terms and the '
+                'tracks or videos you open are sent to that service (Audius, '
+                'Jamendo or YouTube). YouTube videos play in YouTube\'s own '
+                'player. Downloads are saved to Music/AS Media or Movies/AS '
+                'Media; the download history and your API keys stay on this '
+                'device. Nothing from your local library is sent.',
+          ),
+          section(
             'Analytics and ads',
             'There are no analytics, tracking or ads.',
           ),

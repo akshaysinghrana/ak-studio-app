@@ -14,6 +14,10 @@ part 'app_database.g.dart';
 /// Where a library item came from (ADR 0002).
 enum MediaOrigin { mediaStore, imported }
 
+/// Lifecycle of a download (ADR 0004). `waiting` covers the queue limit and
+/// the Wi-Fi-only rule.
+enum DownloadStatus { waiting, running, paused, complete, failed, canceled }
+
 /// Indexed local media. [id] is the app's stable ID; [locator] is the durable
 /// `content://` URI and may change only through rescans (spec 4.1, 11).
 @DataClassName('LibraryItem')
@@ -169,6 +173,40 @@ class SyncMetadata extends Table {
   Set<Column> get primaryKey => {userId};
 }
 
+/// Download history and queue (ADR 0004). Device-only, never synced.
+@DataClassName('DownloadRow')
+@TableIndex(name: 'downloads_source', columns: {#source, #sourceId})
+class Downloads extends Table {
+  TextColumn get id => text()();
+
+  /// Current background_downloader task ID; changes when a download is
+  /// retried.
+  TextColumn get taskId => text()();
+
+  /// `audius`, `jamendo` or `url`.
+  TextColumn get source => text()();
+
+  /// Catalogue track ID or the URL; used to detect duplicates.
+  TextColumn get sourceId => text()();
+  TextColumn get url => text()();
+  TextColumn get title => text()();
+  TextColumn get artist => text().nullable()();
+  TextColumn get kind => textEnum<MediaKind>()();
+  TextColumn get fileName => text()();
+  TextColumn get status => textEnum<DownloadStatus>()();
+  RealColumn get progress => real().withDefault(const Constant(0))();
+  IntColumn get totalBytes => integer().nullable()();
+  TextColumn get error => text().nullable()();
+
+  /// Final location in shared storage once complete.
+  TextColumn get savedPath => text().nullable()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 /// Folders the user chose to hide from the library (device-only, not synced).
 @DataClassName('HiddenFolderRow')
 class HiddenFolders extends Table {
@@ -182,6 +220,7 @@ class HiddenFolders extends Table {
 
 @DriftDatabase(
   tables: [
+    Downloads,
     HiddenFolders,
     SyncTombstones,
     SyncMetadata,
@@ -221,7 +260,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -242,6 +281,10 @@ class AppDatabase extends _$AppDatabase {
       from3To4: (m, schema) async {
         await m.createTable(schema.hiddenFolders);
         await m.createIndex(schema.mediaItemsFolder);
+      },
+      from4To5: (m, schema) async {
+        await m.createTable(schema.downloads);
+        await m.createIndex(schema.downloadsSource);
       },
     ),
     beforeOpen: (details) async {

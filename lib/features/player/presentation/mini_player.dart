@@ -30,7 +30,9 @@ class MiniPlayer extends ConsumerWidget {
         final media = current.media;
         final text = Theme.of(context).textTheme;
         final scheme = Theme.of(context).colorScheme;
-        final thumb = ref.watch(thumbnailProvider(media.locator)).value;
+        final thumb =
+            media.artworkUrl ??
+            ref.watch(thumbnailProvider(media.locator)).value;
         return Padding(
           padding: const EdgeInsets.fromLTRB(10, 0, 10, 8),
           child: GestureDetector(

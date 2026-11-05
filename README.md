@@ -6,6 +6,8 @@ Local-first Flutter player for MP4 and MP3 files. Android only for now. The prod
 
 **Status:** Phases 0–8 implemented (Android). The final on-device pass is pending; see [docs/testing/final-device-test-plan.md](docs/testing/final-device-test-plan.md). Decisions: ADRs [0001](docs/adr/0001-media-engine.md) (engine), [0002](docs/adr/0002-local-storage-and-media-access.md) (storage and media access), [0003](docs/adr/0003-auth-and-sync.md) (accounts and sync).
 
+**Online (ADR [0004](docs/adr/0004-online-discovery-and-downloads.md)):** Discover tab with Audius music (no setup), optional Jamendo and YouTube (bring your own client ID / API key in Settings → Online sources), streaming through the app player, and a download manager for sources that allow downloads. YouTube plays only in its official embedded player and is never downloaded.
+
 **Media engine:** [docs/adr/0001-media-engine.md](docs/adr/0001-media-engine.md). Device evidence: [docs/testing/phase1-device-results.md](docs/testing/phase1-device-results.md).
 
 ## Develop

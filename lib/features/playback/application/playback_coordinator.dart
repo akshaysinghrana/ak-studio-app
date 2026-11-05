@@ -473,7 +473,12 @@ class PlaybackCoordinator extends BaseAudioHandler with SeekHandler {
 
     final media = entry.media;
     final options = VideoPlayerOptions(allowBackgroundPlayback: true);
-    final c = media.locator.startsWith('content://')
+    final c = media.isOnline
+        ? VideoPlayerController.networkUrl(
+            Uri.parse(media.locator),
+            videoPlayerOptions: options,
+          )
+        : media.locator.startsWith('content://')
         ? VideoPlayerController.contentUri(
             Uri.parse(media.locator),
             videoPlayerOptions: options,
@@ -493,9 +498,11 @@ class PlaybackCoordinator extends BaseAudioHandler with SeekHandler {
         playbackState.value.copyWith(
           processingState: AudioProcessingState.error,
           playing: false,
-          errorMessage:
-              'Cannot play "${media.title}". The file may be '
-              'missing, corrupt or use an unsupported codec.',
+          errorMessage: media.isOnline
+              ? 'Cannot stream "${media.title}". Check your connection '
+                    'and try again.'
+              : 'Cannot play "${media.title}". The file may be '
+                    'missing, corrupt or use an unsupported codec.',
         ),
       );
       return;

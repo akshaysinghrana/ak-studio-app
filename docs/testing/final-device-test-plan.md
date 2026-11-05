@@ -61,3 +61,10 @@ Run this once, on the physical Android phone, after all features are built (agre
 | 41 | Sorting | Folders: name/most items/size/recent; files: all 6 options; reopen the app | Order changes; choice remembered |
 | 42 | MP3 artwork | MP3 with embedded cover and one without | Real cover, or gradient art |
 | 43 | Design | Home, Videos, Music, Playlists, Settings, About, players; light theme | New AS Media look; About says "Created by Akshay Studio" |
+| 44 | Discover → Music | Open Discover; switch genres; open a featured playlist and an artist; search "lofi" | Trending, playlists, artists and songs load from Audius; offline shows a retry message |
+| 45 | Streaming | Play a Discover track; lock the phone; use lock-screen controls | Plays through the app player with artwork; lock screen, queue, speed and sleep timer work |
+| 46 | Download a track | Download a track with the download icon (search "free download"); allow notifications | Progress on the row, badge and notification; file in Music/AS Media; appears in the library and the "Downloads" playlist; plays offline |
+| 47 | Download controls | Start 3 downloads with "Simultaneous downloads" = 1; pause, resume, cancel, retry; turn on Wi-Fi only on mobile data | Only one runs at a time; controls work; Wi-Fi-only waits |
+| 48 | Download from link | Paste a direct MP3/MP4 link; paste a YouTube link; paste a web page | MP3/MP4 downloads; YouTube and non-media links are refused with a reason |
+| 49 | YouTube (needs API key) | Add the key in Online sources; open YouTube; search; play; press Home | Results with durations; plays in the official player; local playback pauses; video pauses when the app leaves the foreground |
+| 50 | Jamendo (needs client ID) | Add the client ID; select Jamendo; download a track | Tracks stream; downloads only where allowed |

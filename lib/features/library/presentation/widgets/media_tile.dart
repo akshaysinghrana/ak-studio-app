@@ -404,6 +404,7 @@ class ThumbnailImage extends StatelessWidget {
     required this.kind,
   });
 
+  /// A local thumbnail file, or an `http(s)` URL for catalogue artwork.
   final String? path;
   final String seed;
   final MediaKind kind;
@@ -411,11 +412,14 @@ class ThumbnailImage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final placeholder = GeneratedArtwork(seed: seed, kind: kind);
-    if (path == null) return placeholder;
-    return Image.file(
-      File(path!),
+    final source = path;
+    if (source == null) return placeholder;
+    final ImageProvider provider = source.startsWith('http')
+        ? NetworkImage(source)
+        : FileImage(File(source));
+    return Image(
+      image: ResizeImage.resizeIfNeeded(384, null, provider),
       fit: BoxFit.cover,
-      cacheWidth: 384,
       errorBuilder: (_, _, _) => placeholder,
       frameBuilder: (context, child, frame, sync) => sync
           ? child
