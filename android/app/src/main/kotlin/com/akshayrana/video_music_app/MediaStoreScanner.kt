@@ -2,15 +2,20 @@ package com.akshayrana.video_music_app
 
 import android.content.ContentResolver
 import android.content.ContentUris
+import android.content.ContentValues
 import android.content.Context
+import android.content.Intent
 import android.database.Cursor
 import android.graphics.Bitmap
 import android.media.MediaMetadataRetriever
+import android.media.MediaScannerConnection
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Environment
 import android.os.Handler
 import android.os.Looper
+import android.provider.DocumentsContract
 import android.provider.MediaStore
 import android.provider.OpenableColumns
 import android.util.Log
@@ -31,6 +36,12 @@ class MediaStoreScanner(private val context: Context) : MethodChannel.MethodCall
         const val CHANNEL = "com.akshayrana.video_music_app/media_store"
         private const val UNKNOWN = "<unknown>"
         private const val TAG = "MediaStoreScanner"
+
+        /** Public folder downloads are published into (Android's Downloads dir). */
+        private const val PUBLIC_FOLDER = "AS Media"
+        private const val PUBLIC_RELATIVE_PATH = "Download/$PUBLIC_FOLDER"
+        /** Authority of the system "Files" provider, for opening a folder. */
+        private const val EXTERNAL_STORAGE_AUTHORITY = "com.android.externalstorage.documents"
     }
 
     private val executor = Executors.newFixedThreadPool(2)
@@ -59,7 +70,7 @@ class MediaStoreScanner(private val context: Context) : MethodChannel.MethodCall
                     result.error("bad_args", "uri is required", null)
                     return
                 }
-                { describe(Uri.parse(uri)) }
+                { describe(asUri(uri)) }
             }
             "thumbnail" -> {
                 val uri = call.argument<String>("uri")
@@ -68,7 +79,25 @@ class MediaStoreScanner(private val context: Context) : MethodChannel.MethodCall
                     result.error("bad_args", "uri is required", null)
                     return
                 }
-                { thumbnail(Uri.parse(uri), size) }
+                { thumbnail(asUri(uri), size) }
+            }
+            "publishDownload" -> {
+                val sourcePath = call.argument<String>("sourcePath")
+                val displayName = call.argument<String>("displayName")
+                val mimeType = call.argument<String>("mimeType")
+                if (sourcePath == null || displayName == null || mimeType == null) {
+                    result.error("bad_args", "sourcePath, displayName and mimeType are required", null)
+                    return
+                }
+                { publishDownload(sourcePath, displayName, mimeType) }
+            }
+            "openFolder" -> {
+                val path = call.argument<String>("path")
+                if (path == null) {
+                    result.error("bad_args", "path is required", null)
+                    return
+                }
+                { openFolder(path) }
             }
             else -> {
                 result.notImplemented()
@@ -170,15 +199,139 @@ class MediaStoreScanner(private val context: Context) : MethodChannel.MethodCall
         return rows
     }
 
-    /** Metadata for a user-picked document URI (display name, size, duration). */
+    /**
+     * Accepts a content:// URI, a file:// URI, or a bare absolute path (used by
+     * files the in-app downloader saved into app-private storage).
+     */
+    private fun asUri(raw: String): Uri {
+        val parsed = Uri.parse(raw)
+        return if (parsed.scheme == null && raw.startsWith("/")) {
+            Uri.fromFile(File(raw))
+        } else {
+            parsed
+        }
+    }
+
+    private fun mimeForName(name: String?): String? =
+        when (name?.substringAfterLast('.', "")?.lowercase()) {
+            "mp4" -> "video/mp4"
+            "mp3" -> "audio/mpeg"
+            else -> null
+        }
+
+    /**
+     * Copies a finished download from app-private staging into the public
+     * Downloads folder so other apps and the gallery can see it. Returns the
+     * new location (a content:// URI, or a file path on old Android), or null
+     * when it could not be published (the caller keeps the private copy).
+     *
+     * The media collections are used for video/audio so the row is the same one
+     * a later MediaStore scan reports (no duplicate library entry). On Android
+     * 10+ no storage permission is needed for the app to write its own media.
+     */
+    private fun publishDownload(sourcePath: String, displayName: String, mimeType: String): String? {
+        val source = File(sourcePath)
+        if (!source.exists()) return null
+        val safeName = sanitizeName(displayName)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            // Downloads must land in the public Download directory. Android only
+            // allows the Video/Audio collections under DCIM/Movies/Pictures
+            // (Music/... for audio), so `Download/AS Media` is rejected there;
+            // the Downloads collection is the one that accepts Download/. Its
+            // rows are not returned by the Video/Audio queries the library scan
+            // reads, so a published file is never indexed twice.
+            val values = ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, safeName)
+                put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
+                put(MediaStore.MediaColumns.RELATIVE_PATH, PUBLIC_RELATIVE_PATH)
+                put(MediaStore.MediaColumns.IS_PENDING, 1)
+            }
+            val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values) ?: return null
+            try {
+                val out = resolver.openOutputStream(uri)
+                if (out == null) {
+                    resolver.delete(uri, null, null)
+                    return null
+                }
+                out.use { sink -> source.inputStream().use { it.copyTo(sink) } }
+                resolver.update(
+                    uri,
+                    ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) },
+                    null,
+                    null,
+                )
+            } catch (e: Exception) {
+                resolver.delete(uri, null, null)
+                return null
+            }
+            source.delete()
+            return uri.toString()
+        }
+        // Android 9 and below: copy into the public Downloads folder directly
+        // (WRITE_EXTERNAL_STORAGE is declared up to API 28) and let MediaStore
+        // index it.
+        return try {
+            val dir = File(
+                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+                PUBLIC_FOLDER,
+            )
+            if (!dir.exists() && !dir.mkdirs()) return null
+            val dest = uniqueFile(dir, safeName)
+            source.copyTo(dest, overwrite = false)
+            source.delete()
+            MediaScannerConnection.scanFile(context, arrayOf(dest.absolutePath), arrayOf(mimeType), null)
+            Uri.fromFile(dest).toString()
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /** Opens the system Files app at [relativePath], e.g. `Download/AS Media`. */
+    private fun openFolder(relativePath: String): Boolean = try {
+        val docId = "primary:" + relativePath.trimEnd('/')
+        val uri = DocumentsContract.buildDocumentUri(EXTERNAL_STORAGE_AUTHORITY, docId)
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, DocumentsContract.Document.MIME_TYPE_DIR)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        context.startActivity(intent)
+        true
+    } catch (e: Exception) {
+        false
+    }
+
+    private fun sanitizeName(name: String): String =
+        name.replace('/', '_').replace('\\', '_').trim().ifEmpty { "download" }
+
+    private fun uniqueFile(dir: File, name: String): File {
+        var candidate = File(dir, name)
+        if (!candidate.exists()) return candidate
+        val dot = name.lastIndexOf('.')
+        val base = if (dot > 0) name.substring(0, dot) else name
+        val ext = if (dot > 0) name.substring(dot) else ""
+        var i = 1
+        while (candidate.exists()) {
+            candidate = File(dir, "$base ($i)$ext")
+            i++
+        }
+        return candidate
+    }
+
+    /** Metadata for a user-picked document URI or a plain file (display name, size, duration). */
     private fun describe(uri: Uri): Map<String, Any?> {
         var displayName: String? = null
         var size: Long? = null
-        resolver.query(uri, null, null, null, null)?.use { c ->
-            if (c.moveToFirst()) {
-                displayName = c.stringOrNull(OpenableColumns.DISPLAY_NAME)
-                size = c.longOrNull(OpenableColumns.SIZE)
+        if (uri.scheme == ContentResolver.SCHEME_CONTENT) {
+            resolver.query(uri, null, null, null, null)?.use { c ->
+                if (c.moveToFirst()) {
+                    displayName = c.stringOrNull(OpenableColumns.DISPLAY_NAME)
+                    size = c.longOrNull(OpenableColumns.SIZE)
+                }
             }
+        } else {
+            displayName = uri.lastPathSegment
+            uri.path?.let { p -> size = File(p).length().takeIf { it > 0 } }
         }
         val retriever = MediaMetadataRetriever()
         var durationMs: Long? = null
@@ -200,11 +353,16 @@ class MediaStoreScanner(private val context: Context) : MethodChannel.MethodCall
         } finally {
             retriever.release()
         }
+        val mimeType = if (uri.scheme == ContentResolver.SCHEME_CONTENT) {
+            resolver.getType(uri)
+        } else {
+            mimeForName(displayName)
+        }
         return mapOf(
             "uri" to uri.toString(),
             "displayName" to displayName,
             "title" to title,
-            "mimeType" to resolver.getType(uri),
+            "mimeType" to mimeType,
             "sizeBytes" to size,
             "durationMs" to durationMs,
             "width" to width,
@@ -219,23 +377,27 @@ class MediaStoreScanner(private val context: Context) : MethodChannel.MethodCall
         val dir = File(context.cacheDir, "thumbnails").apply { mkdirs() }
         val out = File(dir, "${uri.toString().hashCode().toUInt()}_$size.jpg")
         if (out.exists()) return out.absolutePath
-        val isAudio = uri.toString().contains("/audio/") ||
-            resolver.getType(uri)?.startsWith("audio/") == true
+        val isContent = uri.scheme == ContentResolver.SCHEME_CONTENT
+        val mime = if (isContent) resolver.getType(uri) else mimeForName(uri.lastPathSegment)
+        val isAudio = uri.toString().contains("/audio/") || mime?.startsWith("audio/") == true
         val bitmap: Bitmap? = try {
             // MP3 cover art: the embedded picture (ID3 APIC), when present.
-            (if (isAudio) embeddedArt(uri, size) else null) ?: if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                resolver.loadThumbnail(uri, Size(size, size), null)
-            } else {
-                val retriever = MediaMetadataRetriever()
-                try {
-                    retriever.setDataSource(context, uri)
-                    retriever.frameAtTime ?: retriever.embeddedPicture?.let {
-                        android.graphics.BitmapFactory.decodeByteArray(it, 0, it.size)
+            (if (isAudio) embeddedArt(uri, size) else null)
+                ?: if (isContent && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    resolver.loadThumbnail(uri, Size(size, size), null)
+                } else {
+                    // Plain files (downloads) and older Android: decode a frame
+                    // or the embedded picture with a retriever.
+                    val retriever = MediaMetadataRetriever()
+                    try {
+                        retriever.setDataSource(context, uri)
+                        retriever.frameAtTime ?: retriever.embeddedPicture?.let {
+                            android.graphics.BitmapFactory.decodeByteArray(it, 0, it.size)
+                        }
+                    } finally {
+                        retriever.release()
                     }
-                } finally {
-                    retriever.release()
                 }
-            }
         } catch (e: Exception) {
             null
         }

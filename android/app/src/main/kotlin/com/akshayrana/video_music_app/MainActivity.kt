@@ -27,6 +27,7 @@ class MainActivity : AudioServiceActivity() {
     private var pipChannel: MethodChannel? = null
     private var documentImporter: DocumentImporter? = null
     private var mediaDeleter: MediaDeleter? = null
+    private var youtubeDlBridge: YoutubeDlBridge? = null
     private var mediaObserver: android.database.ContentObserver? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -42,6 +43,10 @@ class MainActivity : AudioServiceActivity() {
         mediaDeleter = MediaDeleter(this).also {
             MethodChannel(messenger, MediaDeleter.CHANNEL).setMethodCallHandler(it)
         }
+        // On-device yt-dlp extractor for YouTube/Facebook/Instagram/... links.
+        youtubeDlBridge = YoutubeDlBridge(applicationContext, messenger).also { it.register() }
+        // Foreground service that keeps link downloads alive in the background.
+        DownloadServiceChannel(applicationContext, messenger).register()
         // MediaStore changes (files added/deleted by other apps) -> rescan.
         io.flutter.plugin.common.EventChannel(messenger, "com.akshayrana.video_music_app/media_changes")
             .setStreamHandler(object : io.flutter.plugin.common.EventChannel.StreamHandler {

@@ -75,6 +75,16 @@ class FakeMediaStore implements MediaStoreGateway {
   @override
   Future<String?> thumbnail(String uri, {int size = 256}) async => null;
 
+  @override
+  Future<String?> publishDownload({
+    required String sourcePath,
+    required String displayName,
+    required String mimeType,
+  }) async => null;
+
+  @override
+  Future<bool> openFolder(String relativePath) async => false;
+
   final List<(List<String>, bool)> deleted = [];
   bool confirmDelete = true;
 

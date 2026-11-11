@@ -12,7 +12,7 @@ import 'app_database.steps.dart';
 part 'app_database.g.dart';
 
 /// Where a library item came from (ADR 0002).
-enum MediaOrigin { mediaStore, imported }
+enum MediaOrigin { mediaStore, imported, downloaded }
 
 /// Indexed local media. [id] is the app's stable ID; [locator] is the durable
 /// `content://` URI and may change only through rescans (spec 4.1, 11).

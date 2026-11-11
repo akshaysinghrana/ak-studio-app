@@ -17,6 +17,10 @@ class PreferencesRepository {
   static const volumeGestureKey = 'player.volumeGesture';
   static const subtitleSizeKey = 'player.subtitleSize';
 
+  /// Set once older app-private downloads have been moved to the public
+  /// `Download/AS Media` folder (device-only, never synced).
+  static const legacyDownloadMigrationKey = 'downloads.legacyMigrationDone';
+
   Stream<String?> _watch(String key) =>
       (_db.select(_db.userPreferences)..where((t) => t.key.equals(key)))
           .watchSingleOrNull()
@@ -72,6 +76,13 @@ class PreferencesRepository {
 
   Future<void> setSubtitleSize(SubtitleSize size) =>
       _set(subtitleSizeKey, size.name, syncEligible: true);
+
+  /// True once the one-time move of old app-private downloads has finished.
+  Future<bool> legacyDownloadMigrationDone() async =>
+      await _get(legacyDownloadMigrationKey) == 'true';
+
+  Future<void> setLegacyDownloadMigrationDone() =>
+      _set(legacyDownloadMigrationKey, 'true', syncEligible: false);
 
   /// Library view per tab: folders or all items (device-only).
   Stream<bool> watchFolderView(String tab) =>

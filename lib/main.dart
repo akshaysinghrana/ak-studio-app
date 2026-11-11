@@ -18,6 +18,7 @@ import 'app/startup_error_app.dart';
 import 'core/platform/media_store.dart';
 import 'features/account/data/auth_repository.dart';
 import 'core/platform/picture_in_picture.dart';
+import 'features/download/application/download_migration.dart';
 import 'features/library/data/media_library_repository.dart';
 import 'features/playback/application/playback_coordinator.dart';
 import 'features/playback/data/drift_progress_store.dart';
@@ -127,6 +128,11 @@ Future<void> main() async {
     await coordinator.restoreQueue();
   }
 
+  // One-time: move downloads made by older builds out of app-private storage
+  // into the public Download/AS Media folder (spec 4.1, ADR 0002). Runs in the
+  // background so a first launch with large files is not blocked.
+  unawaited(_migrateLegacyDownloads(library, preferences));
+
   // Background sync on start for a signed-in user with sync on; failures are
   // recorded and never block playback.
   final user = auth.currentUser;
@@ -149,6 +155,25 @@ Future<void> main() async {
 }
 
 Uri? _logoUri;
+
+/// Moves downloads made by older builds from app-private storage into the
+/// public `Download/AS Media` folder, once. The run is only recorded when
+/// every file was published, so a later launch retries anything left behind.
+Future<void> _migrateLegacyDownloads(
+  MediaLibraryRepository library,
+  PreferencesRepository preferences,
+) async {
+  try {
+    if (await preferences.legacyDownloadMigrationDone()) return;
+    final complete = await LegacyDownloadMigration(
+      store: const MethodChannelMediaStore(),
+      library: library,
+    ).run();
+    if (complete) await preferences.setLegacyDownloadMigrationDone();
+  } catch (e) {
+    debugPrint('Legacy download migration failed: $e');
+  }
+}
 
 /// The bundled logo copied to a file once, for media-session artwork.
 Future<Uri?> _logoArtwork() async {

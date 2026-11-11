@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/permissions/media_permissions.dart';
+import '../core/platform/download_service.dart';
 import '../core/platform/media_store.dart';
 import '../core/platform/picture_in_picture.dart';
+import '../core/platform/youtube_dl.dart';
 import '../features/account/data/auth_repository.dart';
 import '../features/library/data/media_library_repository.dart';
 import '../features/playback/application/playback_coordinator.dart';
@@ -31,6 +33,16 @@ final pictureInPictureProvider = Provider<PictureInPicture>(
 
 final mediaStoreProvider = Provider<MediaStoreGateway>(
   (ref) => const MethodChannelMediaStore(),
+);
+
+/// On-device yt-dlp extractor for YouTube/Facebook/Instagram/... links.
+final youtubeDlProvider = Provider<YoutubeDlGateway>(
+  (ref) => MethodChannelYoutubeDl(),
+);
+
+/// Foreground service that keeps link downloads alive in the background.
+final downloadServiceProvider = Provider<DownloadServiceGateway>(
+  (ref) => const MethodChannelDownloadService(),
 );
 
 final documentImporterProvider = Provider<DocumentImporter>(

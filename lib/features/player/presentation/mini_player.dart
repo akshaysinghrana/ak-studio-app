@@ -15,7 +15,8 @@ import '../../playback/domain/play_queue.dart';
 import 'widgets/transport_controls.dart';
 
 /// Floating player above the navigation bar whenever an item is active
-/// (spec 3). Tap opens Now Playing; swipe left/right for next/previous.
+/// (spec 3). Tap opens Now Playing; swipe left/right for next/previous while
+/// playing. Sliding the strip away while paused dismisses it.
 class MiniPlayer extends ConsumerWidget {
   const MiniPlayer({super.key});
 
@@ -27,102 +28,160 @@ class MiniPlayer extends ConsumerWidget {
       builder: (context, queue, _) {
         final current = queue.current;
         if (current == null) return const SizedBox.shrink();
-        final media = current.media;
-        final text = Theme.of(context).textTheme;
-        final scheme = Theme.of(context).colorScheme;
-        final thumb = ref.watch(thumbnailProvider(media.locator)).value;
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(10, 0, 10, 8),
-          child: GestureDetector(
-            onHorizontalDragEnd: (d) {
-              final v = d.primaryVelocity ?? 0;
-              if (v < -300 && queue.hasNext) {
-                HapticFeedback.selectionClick();
-                coordinator.skipToNext();
-              } else if (v > 300) {
-                HapticFeedback.selectionClick();
-                coordinator.skipToPrevious();
-              }
-            },
-            child: Material(
-              color: scheme.surfaceContainerHigh,
-              elevation: 8,
-              shadowColor: Colors.black54,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(AppTokens.radiusM),
-                side: BorderSide(color: scheme.outlineVariant),
+        return ValueListenableBuilder<VideoPlayerController?>(
+          valueListenable: coordinator.controller,
+          builder: (context, controller, _) {
+            if (controller == null) {
+              return _strip(
+                context: context,
+                ref: ref,
+                coordinator: coordinator,
+                queue: queue,
+                playing: true,
+              );
+            }
+            return ValueListenableBuilder<VideoPlayerValue>(
+              valueListenable: controller,
+              builder: (context, value, _) => _strip(
+                context: context,
+                ref: ref,
+                coordinator: coordinator,
+                queue: queue,
+                playing: value.isPlaying,
               ),
-              clipBehavior: Clip.antiAlias,
-              child: InkWell(
-                onTap: () => context.push(Routes.player),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _strip({
+    required BuildContext context,
+    required WidgetRef ref,
+    required PlaybackCoordinator coordinator,
+    required PlayQueue queue,
+    required bool playing,
+  }) {
+    final current = queue.current!;
+    final media = current.media;
+    final text = Theme.of(context).textTheme;
+    final scheme = Theme.of(context).colorScheme;
+    final thumb = ref.watch(thumbnailProvider(media.locator)).value;
+    final card = Padding(
+      padding: const EdgeInsets.fromLTRB(10, 0, 10, 8),
+      child: Material(
+        color: scheme.surfaceContainerHigh,
+        elevation: 8,
+        shadowColor: Colors.black54,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppTokens.radiusM),
+          side: BorderSide(color: scheme.outlineVariant),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => context.push(Routes.player),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                height: AppTokens.miniPlayerHeight,
+                child: Row(
                   children: [
-                    SizedBox(
-                      height: AppTokens.miniPlayerHeight,
-                      child: Row(
+                    const SizedBox(width: 10),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: SizedBox(
+                        width: media.kind == MediaKind.video ? 72 : 48,
+                        height: 48,
+                        child: ThumbnailImage(
+                          path: thumb,
+                          seed: media.title,
+                          kind: media.kind,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const SizedBox(width: 10),
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(10),
-                            child: SizedBox(
-                              width: media.kind == MediaKind.video ? 72 : 48,
-                              height: 48,
-                              child: ThumbnailImage(
-                                path: thumb,
-                                seed: media.title,
-                                kind: media.kind,
-                              ),
+                          Text(
+                            media.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: text.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  media.title,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: text.titleSmall?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                                Text(
-                                  media.artist ??
-                                      (media.kind == MediaKind.video
-                                          ? 'Video'
-                                          : 'Music'),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: text.bodySmall?.copyWith(
-                                    color: scheme.onSurfaceVariant,
-                                  ),
-                                ),
-                              ],
+                          Text(
+                            media.artist ??
+                                (media.kind == MediaKind.video
+                                    ? 'Video'
+                                    : 'Music'),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: text.bodySmall?.copyWith(
+                              color: scheme.onSurfaceVariant,
                             ),
                           ),
-                          _PlayPause(coordinator: coordinator),
-                          IconButton(
-                            tooltip: 'Next',
-                            onPressed: queue.hasNext
-                                ? coordinator.skipToNext
-                                : null,
-                            icon: const Icon(Icons.skip_next_rounded),
-                          ),
-                          const SizedBox(width: 4),
                         ],
                       ),
                     ),
-                    _MiniProgress(coordinator: coordinator),
+                    _PlayPause(coordinator: coordinator),
+                    IconButton(
+                      tooltip: 'Next',
+                      onPressed: queue.hasNext ? coordinator.skipToNext : null,
+                      icon: const Icon(Icons.skip_next_rounded),
+                    ),
+                    const SizedBox(width: 4),
                   ],
                 ),
               ),
+              _MiniProgress(coordinator: coordinator),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (!playing) {
+      return Dismissible(
+        key: ValueKey('mini-${current.entryId}'),
+        direction: DismissDirection.horizontal,
+        onDismissed: (_) {
+          HapticFeedback.selectionClick();
+          coordinator.dismissPlayback();
+        },
+        background: Padding(
+          padding: const EdgeInsets.fromLTRB(10, 0, 10, 8),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: scheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(AppTokens.radiusM),
+            ),
+            child: Center(
+              child: Icon(Icons.close_rounded, color: scheme.onSurfaceVariant),
             ),
           ),
-        );
+        ),
+        child: card,
+      );
+    }
+
+    return GestureDetector(
+      onHorizontalDragEnd: (d) {
+        final v = d.primaryVelocity ?? 0;
+        if (v < -300 && queue.hasNext) {
+          HapticFeedback.selectionClick();
+          coordinator.skipToNext();
+        } else if (v > 300) {
+          HapticFeedback.selectionClick();
+          coordinator.skipToPrevious();
+        }
       },
+      child: card,
     );
   }
 }

@@ -13,12 +13,35 @@ class MediaCollection extends StatelessWidget {
     required this.kind,
     required this.grid,
     required this.onPlay,
+    this.selecting = false,
+    this.selectedIds = const {},
+    this.onToggleSelect,
+    this.onEnterSelection,
   });
 
   final List<LibraryEntry> entries;
   final MediaKind kind;
   final bool grid;
   final void Function(int index) onPlay;
+  final bool selecting;
+  final Set<String> selectedIds;
+  final void Function(LibraryEntry entry)? onToggleSelect;
+  final void Function(LibraryEntry entry)? onEnterSelection;
+
+  VoidCallback _onTap(int i) {
+    final entry = entries[i];
+    if (selecting) {
+      return () => onToggleSelect?.call(entry);
+    }
+    return () => onPlay(i);
+  }
+
+  VoidCallback? _onLongPress(int i) {
+    if (selecting || onEnterSelection == null) return null;
+    final entry = entries[i];
+    if (!entry.item.available) return null;
+    return () => onEnterSelection!(entry);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -31,7 +54,10 @@ class MediaCollection extends StatelessWidget {
         itemBuilder: (context, i) => MediaTile(
           key: ValueKey(entries[i].item.id),
           entry: entries[i],
-          onTap: () => onPlay(i),
+          onTap: _onTap(i),
+          selecting: selecting,
+          selected: selectedIds.contains(entries[i].item.id),
+          onLongPress: _onLongPress(i),
         ),
       );
     }
@@ -62,7 +88,10 @@ class MediaCollection extends StatelessWidget {
           itemBuilder: (context, i) => MediaCard(
             key: ValueKey(entries[i].item.id),
             entry: entries[i],
-            onTap: () => onPlay(i),
+            onTap: _onTap(i),
+            selecting: selecting,
+            selected: selectedIds.contains(entries[i].item.id),
+            onLongPress: _onLongPress(i),
           ),
         );
       },

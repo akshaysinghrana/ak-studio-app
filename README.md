@@ -37,7 +37,7 @@ python3 -I scripts/device_lifecycle_checks.py <device-id> [check ...]
 
 ## Release
 
-Publish an App Bundle: `flutter build appbundle`. Play then delivers a per-ABI APK, so the 50 MB fat APK never reaches users.
+Publish an App Bundle: `flutter build appbundle`. Play then delivers only the matching ABI to each device. For direct APK distribution, build separate packages with `flutter build apk --release --split-per-abi` and give users the APK that matches their device. The arm64 release APK is about 67 MB; the universal APK includes all native Python/FFmpeg architectures and is much larger.
 
 Release signing reads `android/key.properties`, which is git-ignored and never committed:
 

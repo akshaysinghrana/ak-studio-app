@@ -178,9 +178,7 @@ class PlaybackCoordinator extends BaseAudioHandler with SeekHandler {
     final wasPlaying = controller.value?.value.isPlaying ?? false;
     final remaining = [...q.entries]..removeAt(q.currentIndex);
     if (remaining.isEmpty) {
-      await stop();
-      _setQueue(const PlayQueue.empty());
-      mediaItem.add(null);
+      await dismissPlayback();
       return;
     }
     _setQueue(
@@ -382,6 +380,26 @@ class PlaybackCoordinator extends BaseAudioHandler with SeekHandler {
       ),
     );
     _log('stop');
+    await super.stop();
+  }
+
+  /// Stops playback and clears the queue so the mini-player strip hides.
+  Future<void> dismissPlayback() async {
+    setSleepTimer();
+    _savePosition();
+    _loadGeneration++;
+    // Empty the queue before any await so the mini-player can rebuild away
+    // immediately after a swipe-to-dismiss.
+    _setQueue(const PlayQueue.empty());
+    mediaItem.add(null);
+    await _disposeController();
+    playbackState.add(
+      playbackState.value.copyWith(
+        processingState: AudioProcessingState.idle,
+        playing: false,
+      ),
+    );
+    _log('playback dismissed');
     await super.stop();
   }
 

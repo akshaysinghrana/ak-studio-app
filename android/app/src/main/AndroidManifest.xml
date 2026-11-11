@@ -25,11 +25,16 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <!-- Required for foregroundServiceType="mediaPlayback" when targeting API 34+. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
-    <!-- POST_NOTIFICATIONS is intentionally omitted: media-session notifications are exempt on
-         Android 13+. Add it only if non-media notifications are introduced. -->
+    <!-- Link downloads run in a dataSync foreground service so Android does not freeze the
+         app (and fail the transfer) while it is in the background. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <!-- Media-session notifications are exempt on Android 13+, but the download progress
+         notification is not, so it is requested when the first download starts. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
-    <!-- ===== Network: account auth and metadata sync only (spec section 9). ===== -->
-    <!-- Media files are never uploaded. Playback works fully offline. -->
+    <!-- ===== Network: account auth, metadata sync, and https downloads. ===== -->
+    <!-- Media files are never uploaded. Playback works fully offline. Downloads
+         over plain http are refused (cleartext stays disabled). -->
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Merged in by Firebase/Play services but not needed by Auth or Firestore. -->
     <uses-permission
@@ -40,7 +45,8 @@
         android:label="AS Media"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
-        android:allowBackup="false">
+        android:allowBackup="false"
+        android:extractNativeLibs="true">
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -76,6 +82,12 @@
                 <action android:name="android.media.browse.MediaBrowserService" />
             </intent-filter>
         </service>
+
+        <!-- Keeps link downloads running while the app is in the background. -->
+        <service
+            android:name=".DownloadService"
+            android:foregroundServiceType="dataSync"
+            android:exported="false" />
 
         <!-- audio_service: headset / Bluetooth media buttons. -->
         <receiver

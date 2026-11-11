@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:math';
 
 import 'package:drift/drift.dart';
@@ -140,6 +141,11 @@ class MediaLibraryRepository {
 
   /// [watch] folder filter for imported files, which have no folder.
   static const noFolder = '';
+
+  /// Folder label grouping files saved by the in-app downloader. Matches the
+  /// public relative path downloads are published into, so a later MediaStore
+  /// scan reconciles the same row instead of re-filing it.
+  static const downloadFolder = 'Download/AS Media/';
 
   // ---------------------------------------------------------------------------
   // Queries
@@ -404,6 +410,77 @@ class MediaLibraryRepository {
     return ImportSummary(imported: imported, skipped: skipped);
   }
 
+  /// Indexes a finished download into the library. [locator] is where the
+  /// published file lives: a `content://` URI in the public Downloads folder,
+  /// or a plain app-private path when publishing was not possible.
+  Future<LibraryEntry> registerDownload({
+    required String locator,
+    required String title,
+    required String displayName,
+    required MediaKind kind,
+    String? mimeType,
+    int? sizeBytes,
+    int? width,
+    int? height,
+    int? durationMs,
+  }) async {
+    final record = MediaRecord(
+      uri: locator,
+      kind: kind,
+      displayName: displayName,
+      title: title.trim().isEmpty ? null : title.trim(),
+      mimeType:
+          mimeType ?? (kind == MediaKind.video ? 'video/mp4' : 'audio/mpeg'),
+      durationMs: durationMs,
+      sizeBytes: sizeBytes,
+      folder: downloadFolder,
+      width: width,
+      height: height,
+      addedAt: DateTime.now(),
+    );
+    await _upsertPage([record], MediaOrigin.downloaded, 0);
+    final row = await (_joined()..where(_items.locator.equals(locator)))
+        .getSingle();
+    return _entry(row);
+  }
+
+  /// Re-points an already-indexed download at [newLocator] after its file was
+  /// moved from app-private storage into the public Downloads folder. The row
+  /// keeps its id, so playback progress, playlists and favourites survive.
+  /// Returns false when no row used [oldLocator] (the caller then registers
+  /// the file as a new download).
+  Future<bool> relocateDownload({
+    required String oldLocator,
+    required String newLocator,
+    required String mimeType,
+    required int sizeBytes,
+  }) async {
+    final old = await (_db.select(
+      _items,
+    )..where((t) => t.locator.equals(oldLocator))).getSingleOrNull();
+    if (old == null) return false;
+    final existing = await (_db.select(
+      _items,
+    )..where((t) => t.locator.equals(newLocator))).getSingleOrNull();
+    if (existing != null && existing.id != old.id) {
+      // The file is already indexed under its public URI: drop the stale
+      // private-path row so the library does not show a duplicate.
+      await (_db.delete(_items)..where((t) => t.id.equals(old.id))).go();
+      return true;
+    }
+    await (_db.update(_items)..where((t) => t.id.equals(old.id))).write(
+      MediaItemsCompanion(
+        locator: Value(newLocator),
+        folder: const Value(downloadFolder),
+        origin: const Value(MediaOrigin.downloaded),
+        available: const Value(true),
+        mimeType: Value(mimeType),
+        sizeBytes: Value(sizeBytes),
+      ),
+    );
+    return true;
+  }
+
   /// Imported documents stay playable only while their grant exists.
   Future<void> refreshImportedAccess() async {
     final imported = await (_db.select(
@@ -430,7 +507,13 @@ class MediaLibraryRepository {
     final bool present;
     if (item.origin == MediaOrigin.imported) {
       present = await _importer.hasAccess(item.locator);
+    } else if (item.origin == MediaOrigin.downloaded &&
+        !_isContentUri(item.locator)) {
+      // A download that could not be published stays a plain app-private path.
+      present = await _plainFileExists(item.locator);
     } else {
+      // MediaStore rows: scanned files and downloads published to the public
+      // Downloads folder are both content URIs.
       try {
         present = await _store.describe(item.locator) != null;
       } on Exception {
@@ -449,14 +532,37 @@ class MediaLibraryRepository {
     required bool trash,
   }) async {
     if (items.isEmpty) return true;
-    final ok = await _store.deleteMedia([
-      for (final i in items) i.locator,
-    ], trash: trash);
-    if (!ok) return false;
+    // MediaStore rows are deleted through the system prompt. That includes
+    // scanned files and downloads published to the public Downloads folder;
+    // only downloads left as plain app-private paths are removed directly.
+    final storeItems = [
+      for (final i in items)
+        if (i.origin != MediaOrigin.downloaded || _isContentUri(i.locator)) i,
+    ];
+    if (storeItems.isNotEmpty) {
+      final ok = await _store.deleteMedia([
+        for (final i in storeItems) i.locator,
+      ], trash: trash);
+      if (!ok) return false;
+    }
     final ids = [for (final i in items) i.id];
     await (_db.delete(_items)..where((t) => t.id.isIn(ids))).go();
     for (final i in items.where((i) => i.origin == MediaOrigin.imported)) {
       await _importer.release(i.locator);
+    }
+    for (final i in items) {
+      if (i.origin != MediaOrigin.downloaded || _isContentUri(i.locator)) {
+        continue;
+      }
+      try {
+        final uri = Uri.tryParse(i.locator);
+        final file = (uri != null && uri.scheme == 'file')
+            ? File.fromUri(uri)
+            : File(i.locator);
+        if (await file.exists()) await file.delete();
+      } on Exception {
+        // The library row is already gone; a leftover file is harmless.
+      }
     }
     return true;
   }
@@ -584,6 +690,21 @@ class MediaLibraryRepository {
   String _newId() {
     final bytes = List<int>.generate(12, (_) => _random.nextInt(256));
     return 'm_${bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
+  }
+
+  static bool _isContentUri(String locator) => locator.startsWith('content://');
+
+  /// True when a plain app-private path (or `file://` URI) still exists.
+  static Future<bool> _plainFileExists(String locator) async {
+    try {
+      final uri = Uri.tryParse(locator);
+      final file = (uri != null && uri.scheme == 'file')
+          ? File.fromUri(uri)
+          : File(locator);
+      return await file.exists();
+    } on Exception {
+      return false;
+    }
   }
 
   static String _escapeLike(String s) =>

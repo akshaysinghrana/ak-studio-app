@@ -16,6 +16,19 @@ abstract interface class MediaStoreGateway {
   /// Path of a cached JPEG thumbnail, or null when none can be produced.
   Future<String?> thumbnail(String uri, {int size});
 
+  /// Copies the finished download at [sourcePath] into the public Downloads
+  /// folder (visible to the gallery and other apps) and returns its new
+  /// location: a `content://` URI, or a file path on old Android. Null when it
+  /// could not be published, so the caller keeps the private copy.
+  Future<String?> publishDownload({
+    required String sourcePath,
+    required String displayName,
+    required String mimeType,
+  });
+
+  /// Opens the system file browser at [relativePath], e.g. `Download/AS Media`.
+  Future<bool> openFolder(String relativePath);
+
   /// Moves files to the system trash (Android 11+) or deletes them
   /// permanently. Android asks the user to confirm; returns false when the
   /// user declines.
@@ -69,6 +82,22 @@ class MethodChannelMediaStore implements MediaStoreGateway {
   @override
   Future<String?> thumbnail(String uri, {int size = 256}) =>
       _channel.invokeMethod<String>('thumbnail', {'uri': uri, 'size': size});
+
+  @override
+  Future<String?> publishDownload({
+    required String sourcePath,
+    required String displayName,
+    required String mimeType,
+  }) => _channel.invokeMethod<String>('publishDownload', {
+    'sourcePath': sourcePath,
+    'displayName': displayName,
+    'mimeType': mimeType,
+  });
+
+  @override
+  Future<bool> openFolder(String relativePath) async =>
+      await _channel.invokeMethod<bool>('openFolder', {'path': relativePath}) ??
+      false;
 
   static const _delete = MethodChannel(
     'com.akshayrana.video_music_app/media_delete',

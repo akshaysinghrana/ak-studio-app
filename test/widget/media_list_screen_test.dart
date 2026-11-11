@@ -202,4 +202,26 @@ void main() {
       await unmount(tester);
     },
   );
+
+  testWidgets('select files, select all, and offer bulk delete', (
+    tester,
+  ) async {
+    store.videos = [record(1, title: 'Holiday'), record(2, title: 'Party')];
+    await index(tester);
+    await allItemsAsList(tester, MediaKind.video);
+    await pump(tester, MediaKind.video);
+
+    await tester.longPress(find.text('Holiday'));
+    await tester.pump();
+    expect(find.text('1 selected'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Select all'));
+    await tester.pump();
+    expect(find.text('2 selected'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Delete selected'));
+    await tester.pumpAndSettle();
+    expect(find.text('Delete 2 files?'), findsOneWidget);
+    await unmount(tester);
+  });
 }

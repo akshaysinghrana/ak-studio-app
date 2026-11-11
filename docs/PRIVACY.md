@@ -15,7 +15,10 @@
 - **Files picked with the system picker:** need no permission; access is kept per file.
 - **Not requested:** all-files access and photos access.
 - **Foreground service / wake lock:** to keep playing when the screen is off.
-- **Internet:** used only for sign-in and sync.
+- **Internet:** used for optional sign-in and metadata sync, and when you paste
+  a web link to resolve or download media. Link requests go directly from your
+  device to the site. The extractor may check GitHub for yt-dlp updates when it
+  is first used; update failure does not prevent trying the bundled version.
 
 ## Optional account
 If you sign in, the following sync to your account (Firebase, operated by Google):

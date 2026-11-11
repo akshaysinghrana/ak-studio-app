@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../app/providers.dart';
 import '../../../../app/theme/app_theme.dart';
 import '../../../../app/theme/brand_widgets.dart';
+import '../../../../shared/data/app_database.dart';
 import '../../../player/presentation/widgets/transport_controls.dart';
 import '../../../playback/domain/media_source.dart';
 import '../../../playlists/application/playlist_providers.dart';
@@ -37,6 +38,8 @@ enum _Action {
   addToQueue,
   addToPlaylist,
   favorite,
+  details,
+  showInFolder,
   removeFromHistory,
   rescan,
   remove,
@@ -90,6 +93,12 @@ class MediaActionsButton extends ConsumerWidget {
           const PopupMenuItem(
             value: _Action.rescan,
             child: Text('Rescan library'),
+          ),
+        const PopupMenuItem(value: _Action.details, child: Text('Details')),
+        if (item.folder != null)
+          const PopupMenuItem(
+            value: _Action.showInFolder,
+            child: Text('Show in folder'),
           ),
         if (showRemoveFromHistory)
           const PopupMenuItem(
@@ -146,6 +155,18 @@ class MediaActionsButton extends ConsumerWidget {
         messenger.showSnackBar(
           SnackBar(content: Text('Removed "$title" from history')),
         );
+      case _Action.details:
+        await showMediaDetailsDialog(context, entry);
+      case _Action.showInFolder:
+        final folder = entry.item.folder;
+        if (folder != null) {
+          final ok = await ref.read(mediaStoreProvider).openFolder(folder);
+          if (!ok) {
+            messenger.showSnackBar(
+              const SnackBar(content: Text('Could not open the folder.')),
+            );
+          }
+        }
       case _Action.rescan:
         await LibraryActions.scan(context, ref);
       case _Action.remove:
@@ -167,11 +188,17 @@ class MediaTile extends ConsumerWidget {
     required this.entry,
     required this.onTap,
     this.showRemoveFromHistory = false,
+    this.selecting = false,
+    this.selected = false,
+    this.onLongPress,
   });
 
   final LibraryEntry entry;
   final VoidCallback onTap;
   final bool showRemoveFromHistory;
+  final bool selecting;
+  final bool selected;
+  final VoidCallback? onLongPress;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -188,8 +215,17 @@ class MediaTile extends ConsumerWidget {
 
     return ListTile(
       enabled: item.available,
+      selected: selecting && selected,
       onTap: item.available ? onTap : null,
-      leading: MediaThumbnail(entry: entry),
+      onLongPress: item.available ? onLongPress : null,
+      leading: selecting
+          ? ExcludeSemantics(
+              child: Checkbox(
+                value: selected,
+                onChanged: item.available ? (_) => onTap() : null,
+              ),
+            )
+          : MediaThumbnail(entry: entry),
       title: Row(
         children: [
           Expanded(
@@ -225,10 +261,12 @@ class MediaTile extends ConsumerWidget {
             ),
         ],
       ),
-      trailing: MediaActionsButton(
-        entry: entry,
-        showRemoveFromHistory: showRemoveFromHistory,
-      ),
+      trailing: selecting
+          ? null
+          : MediaActionsButton(
+              entry: entry,
+              showRemoveFromHistory: showRemoveFromHistory,
+            ),
     );
   }
 }
@@ -241,6 +279,9 @@ class MediaCard extends ConsumerWidget {
     required this.onTap,
     this.showRemoveFromHistory = false,
     this.width,
+    this.selecting = false,
+    this.selected = false,
+    this.onLongPress,
   });
 
   final LibraryEntry entry;
@@ -249,6 +290,9 @@ class MediaCard extends ConsumerWidget {
 
   /// Fixed width for horizontal carousels; null fills the grid cell.
   final double? width;
+  final bool selecting;
+  final bool selected;
+  final VoidCallback? onLongPress;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -265,6 +309,7 @@ class MediaCard extends ConsumerWidget {
       ),
       child: InkWell(
         onTap: item.available ? onTap : null,
+        onLongPress: item.available ? onLongPress : null,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -274,6 +319,25 @@ class MediaCard extends ConsumerWidget {
                 fit: StackFit.expand,
                 children: [
                   MediaThumbnail(entry: entry, fill: true),
+                  if (selecting && selected)
+                    ColoredBox(color: scheme.primary.withValues(alpha: 0.28)),
+                  if (selecting)
+                    Positioned(
+                      top: 8,
+                      left: 8,
+                      child: ExcludeSemantics(
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: scheme.surface.withValues(alpha: 0.9),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Checkbox(
+                            value: selected,
+                            onChanged: item.available ? (_) => onTap() : null,
+                          ),
+                        ),
+                      ),
+                    ),
                   const DecoratedBox(
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
@@ -351,10 +415,11 @@ class MediaCard extends ConsumerWidget {
                     ),
                   ),
                 ),
-                MediaActionsButton(
-                  entry: entry,
-                  showRemoveFromHistory: showRemoveFromHistory,
-                ),
+                if (!selecting)
+                  MediaActionsButton(
+                    entry: entry,
+                    showRemoveFromHistory: showRemoveFromHistory,
+                  ),
               ],
             ),
           ],
@@ -432,4 +497,117 @@ class ThumbnailImage extends StatelessWidget {
             ),
     );
   }
+}
+
+/// Item details: where the file is stored, its size, format, resolution and
+/// when it was added. The location is selectable so it can be copied out.
+Future<void> showMediaDetailsDialog(BuildContext context, LibraryEntry entry) {
+  final item = entry.item;
+  final rows = <(String, String)>[
+    ('Title', item.title),
+    ('Type', item.kind == MediaKind.video ? 'Video' : 'Audio'),
+    ('Source', _originLabel(item.origin)),
+    ('Folder', item.folder ?? 'Imported with Choose files'),
+    if (item.displayName != null) ('File', item.displayName!),
+    if (item.sizeBytes != null) ('Size', formatBytes(item.sizeBytes!)),
+    if (item.durationMs != null)
+      ('Duration', formatDuration(Duration(milliseconds: item.durationMs!))),
+    if (_fileFormat(item) != null) ('Format', _fileFormat(item)!),
+    if (item.width != null && item.height != null)
+      ('Resolution', '${item.width}×${item.height}'),
+    ('Added', _formatDate(item.addedAt)),
+    ('Location', item.locator),
+  ];
+  return _showRowsDialog(context, title: 'Details', rows: rows);
+}
+
+/// Folder details: its path, item count, total size and visibility.
+Future<void> showFolderDetailsDialog(
+  BuildContext context,
+  FolderSummary folder,
+  MediaKind kind,
+) {
+  final noun = kind == MediaKind.video ? 'Videos' : 'Songs';
+  final rows = <(String, String)>[
+    ('Name', folder.name),
+    ('Path', folder.path),
+    (noun, '${folder.count}'),
+    ('Size', formatBytes(folder.totalBytes)),
+    ('Hidden', folder.hidden ? 'Yes' : 'No'),
+    if (folder.latestAddedAt != null)
+      ('Latest', _formatDate(folder.latestAddedAt!)),
+  ];
+  return _showRowsDialog(context, title: 'Folder details', rows: rows);
+}
+
+Future<void> _showRowsDialog(
+  BuildContext context, {
+  required String title,
+  required List<(String, String)> rows,
+}) {
+  return showDialog<void>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text(title),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (final (label, value) in rows)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 3),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(
+                      width: 84,
+                      child: Text(
+                        label,
+                        style: Theme.of(context).textTheme.labelMedium,
+                      ),
+                    ),
+                    Expanded(child: SelectableText(value)),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Close'),
+        ),
+      ],
+    ),
+  );
+}
+
+String _originLabel(MediaOrigin origin) => switch (origin) {
+  MediaOrigin.mediaStore => 'On this device',
+  MediaOrigin.downloaded => 'Downloaded in the app',
+  MediaOrigin.imported => 'Imported with Choose files',
+};
+
+String? _fileFormat(LibraryItem item) {
+  final name = item.displayName;
+  if (name != null) {
+    final dot = name.lastIndexOf('.');
+    if (dot >= 0 && dot < name.length - 1) {
+      return name.substring(dot + 1).toUpperCase();
+    }
+  }
+  final mime = item.mimeType;
+  if (mime != null && mime.contains('/')) {
+    return mime.split('/').last.toUpperCase();
+  }
+  return null;
+}
+
+String _formatDate(DateTime value) {
+  final d = value.toLocal();
+  String two(int n) => n.toString().padLeft(2, '0');
+  return '${d.year}-${two(d.month)}-${two(d.day)} '
+      '${two(d.hour)}:${two(d.minute)}';
 }

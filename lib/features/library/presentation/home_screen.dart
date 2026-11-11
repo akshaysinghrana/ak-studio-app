@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../app/router.dart';
 import '../../../app/theme/app_theme.dart';
 import '../../../app/theme/brand_widgets.dart';
+import '../../download/presentation/download_sheet.dart';
 import '../../playback/domain/media_source.dart';
 import '../../playlists/application/playlist_providers.dart';
 import '../application/library_providers.dart';
@@ -62,6 +63,11 @@ class HomeScreen extends ConsumerWidget {
                   ),
                 ],
               ),
+            ),
+            IconButton(
+              tooltip: 'Download from link',
+              onPressed: () => showDownloadSheet(context),
+              icon: const Icon(Icons.download_rounded),
             ),
             IconButton(
               tooltip: 'Choose files',

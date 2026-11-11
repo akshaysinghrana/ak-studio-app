@@ -11,7 +11,7 @@ import '../../data/media_library_repository.dart';
 import '../library_actions.dart';
 import 'media_tile.dart';
 
-enum _FolderAction { hide, show, delete }
+enum _FolderAction { details, showInFolder, hide, show, delete }
 
 /// A folder card: preview thumbnail with a folder badge, name, item count,
 /// size and path; Hide / Show / Delete in its menu.
@@ -106,6 +106,15 @@ class FolderTile extends ConsumerWidget {
             tooltip: 'Folder options for ${folder.name}',
             onSelected: (a) => _onFolderAction(context, ref, a),
             itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: _FolderAction.details,
+                child: Text('Details'),
+              ),
+              if (folder.folder != null)
+                const PopupMenuItem(
+                  value: _FolderAction.showInFolder,
+                  child: Text('Show in folder'),
+                ),
               if (folder.folder != null)
                 if (folder.hidden)
                   const PopupMenuItem(
@@ -137,6 +146,18 @@ class FolderTile extends ConsumerWidget {
     _FolderAction a,
   ) async {
     switch (a) {
+      case _FolderAction.details:
+        await showFolderDetailsDialog(context, folder, kind);
+      case _FolderAction.showInFolder:
+        final path = folder.folder;
+        if (path != null) {
+          final ok = await ref.read(mediaStoreProvider).openFolder(path);
+          if (!ok && context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Could not open the folder.')),
+            );
+          }
+        }
       case _FolderAction.hide || _FolderAction.show:
         await setFolderHidden(
           context,

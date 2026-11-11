@@ -170,19 +170,19 @@ abstract final class LibraryActions {
   /// Asks how to delete [items] (trash or permanently), lets Android confirm,
   /// then updates the library and the queue. [what] describes the selection,
   /// e.g. `"Holiday"` or `the 12 videos in "Camera"`.
-  static Future<void> confirmDelete(
+  static Future<bool> confirmDelete(
     BuildContext context,
     WidgetRef ref,
     List<LibraryItem> items, {
     required String what,
   }) async {
-    if (items.isEmpty) return;
+    if (items.isEmpty) return false;
     final messenger = ScaffoldMessenger.of(context);
     final repo = ref.read(libraryRepositoryProvider);
     final trashSupported =
         await ref.read(mediaStoreProvider).isTrashSupported() &&
         items.every((i) => i.origin == MediaOrigin.mediaStore);
-    if (!context.mounted) return;
+    if (!context.mounted) return false;
     final trash = await showModalBottomSheet<bool>(
       context: context,
       useRootNavigator: true,
@@ -223,10 +223,10 @@ abstract final class LibraryActions {
         );
       },
     );
-    if (trash == null) return;
+    if (trash == null) return false;
     try {
       final ok = await repo.deleteFiles(items, trash: trash);
-      if (!ok) return; // declined in the system dialog
+      if (!ok) return false; // declined in the system dialog
       await ref.read(coordinatorProvider).removeMedia({
         for (final i in items) i.id,
       });
@@ -239,10 +239,12 @@ abstract final class LibraryActions {
           ),
         ),
       );
+      return true;
     } on PlatformException catch (e) {
       messenger.showSnackBar(
         SnackBar(content: Text('Could not delete: ${e.message ?? e.code}')),
       );
+      return false;
     }
   }
 }
